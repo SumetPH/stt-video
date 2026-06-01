@@ -68,10 +68,34 @@ LLM_API_KEY=""
 
 - `SUBTITLE_FONT` เลือกฟอนต์สำหรับ burn subtitle
 - `WHISPER_DEVICE` บังคับ device เป็น `cpu`, `mps`, หรือ `cuda`
+- `WHISPER_MODEL` เลือกโมเดล Whisper ค่า default คือ `large-v3`
+- `WHISPER_TEMPERATURES` ลำดับ temperature fallback ตอนถอดเสียง ค่า default คือ `0,0.2,0.4,0.6`
+- `WHISPER_NO_SPEECH_THRESHOLD` threshold สำหรับข้ามช่วงไม่มีเสียง ค่า default คือ `0.6`
+- `WHISPER_COMPRESSION_RATIO_THRESHOLD` threshold สำหรับจับข้อความวนซ้ำแล้ว retry ค่า default คือ `1.8`
+- `WHISPER_LOGPROB_THRESHOLD` threshold confidence ของ Whisper ค่า default คือ `-1.0`
+- `WHISPER_WORD_TIMESTAMPS` เปิด word timestamp เพื่อช่วยจับ hallucination ช่วงเงียบ ค่า default คือ `true` บน CPU/CUDA และ `false` บน MPS
+- `WHISPER_HALLUCINATION_SILENCE_THRESHOLD` threshold ตัด hallucination รอบช่วงเงียบ ค่า default คือ `1.0`
 - `WHISPER_CHUNK_SECONDS` ความยาวต่อ chunk ตอนถอดเสียง ค่า default คือ `900`
 - `WHISPER_CHUNK_OVERLAP_SECONDS` overlap ระหว่าง chunk ค่า default คือ `1.5`
 - `LLM_TRANSLATE_BLOCKS_PER_CHUNK` จำนวน block ต่อรอบตอนแปล ค่า default คือ `60`
 - `LLM_TRANSLATE_CONTEXT_BLOCKS` จำนวน block ก่อนหน้าที่ส่งเป็น context ตอนแปล ค่า default คือ `4`
+- `TRANSLATION_PROMPT_PATH` ไฟล์ system prompt สำหรับแปล ค่า default คือ `prompts/korean-thai-livestream.md`
+
+## Translation Prompt
+
+prompt สำหรับแปลถูกแยกไว้ที่:
+
+```text
+prompts/korean-thai-livestream.md
+```
+
+ถ้าต้องการเปลี่ยนคาแรกเตอร์ผู้พูดหรือโทนภาษา ให้แก้ส่วน `Speaker profile` ในไฟล์นี้ หรือทำไฟล์ใหม่แล้วระบุ path ตอนรัน:
+
+```bash
+.venv/bin/python subtitle_pipeline.py translate /path/to/raw.srt \
+  --translation-prompt ./prompts/my-speaker.md \
+  --output-dir ./out
+```
 
 ## Quick Start
 

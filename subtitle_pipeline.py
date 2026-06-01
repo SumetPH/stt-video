@@ -16,52 +16,8 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Sequence
 
-SYSTEM_PROMPT = """You are a professional subtitle translator specializing in Korean-to-Thai livestream subtitles.
-Translate the subtitle text below from Korean to Thai.
-
-Context:
-- This is a casual Korean livestream / streaming VOD
-- The primary speaker is a 27-year-old female streamer
-- The subtitles may contain casual speech, chat reactions, game terms, slang, hesitation, filler words, and STT errors
-- The goal is Thai subtitles that feel natural, easy to read, and faithful to what was actually said
-
-Rules:
-- Preserve every SRT block exactly: index number, timestamp line, and blank line separator must remain unchanged
-- Only translate subtitle text lines; never change index numbers or timestamps
-- Translate into natural Thai suitable for on-screen subtitles
-- Keep the tone conversational, like a real streamer talking naturally on stream
-- Reflect Korean politeness and speech level naturally in Thai, but do not overuse Thai particles
-- When the speaker clearly refers to herself, use natural feminine Thai phrasing where appropriate
-- Do not invent missing meaning; if the Korean is unclear, garbled, or obviously affected by STT errors, translate conservatively based on the most likely meaning
-- If a word is too unclear to confidently interpret, keep it short and neutral rather than guessing wildly
-- Keep names, nicknames, game terms, item names, and proper nouns consistent throughout the file
-- Do not transliterate Korean words into Thai unless they are names or proper nouns
-- Preserve repeated lines only if they are truly repeated in the source text
-- Remove obvious filler or STT noise only when doing so does not change the meaning
-- Keep each subtitle short and natural for reading on screen, ideally no more than about 40 Thai characters per line
-- If a line is a greeting to chat or viewers, translate it like a natural Thai streamer greeting
-
-Return only the translated SRT content. No explanation, no markdown, no code block.
-"""
-
-TEXT_TRANSLATION_SYSTEM_PROMPT = """You are a professional subtitle translator specializing in Korean-to-Thai livestream subtitles.
-Translate Korean subtitle text into natural Thai.
-
-Context:
-- This is a casual Korean livestream / streaming VOD
-- The primary speaker is a 27-year-old female streamer
-- The subtitles may contain casual speech, chat reactions, game terms, slang, hesitation, filler words, and STT errors
-- The goal is Thai subtitles that feel natural, easy to read, and faithful to what was actually said
-
-Rules:
-- Translate only the subtitle text for each block
-- Keep the number of output blocks exactly the same as the input blocks
-- Keep names, nicknames, game terms, item names, and proper nouns consistent throughout the file
-- Do not invent missing meaning; if the Korean is unclear, translate conservatively
-- Keep each subtitle short and natural for reading on screen
-- Return only the requested block markers and Thai translations
-- Do not add explanations, code fences, timestamps, or extra blocks
-"""
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_TRANSLATION_PROMPT_PATH = SCRIPT_DIR / "prompts" / "korean-thai-livestream.md"
 
 DEFAULT_FONT_CANDIDATES = [
     "Sarabun",
@@ -85,14 +41,24 @@ FILLER_WORDS = {
     "아아",
     "음",
     "음음",
+    "음음음",
     "응",
+    "응응",
     "으",
+    "으음",
     "어?",
     "음?",
+    "으음?",
     "어...",
     "음...",
+    "으음...",
 }
 NORMALIZED_FILLER_WORDS = {re.sub(r"[^\w가-힣]+", "", word.casefold()) for word in FILLER_WORDS}
+FILLER_NOISE_CHARS = set("아어으음응")
+REPEATED_FILLER_MIN_TOKENS = 4
+REPEATED_FILLER_MIN_SECONDS = 8.0
+REPEATED_CHAR_MIN_LENGTH = 16
+REPEATED_CHAR_DOMINANCE_RATIO = 0.75
 
 
 class PipelineError(RuntimeError):
@@ -196,6 +162,14 @@ def add_llm_args(parser: argparse.ArgumentParser) -> None:
         "--llm-model",
         default=os.getenv("LLM_MODEL"),
         help="Model name for translation (defaults to LLM_MODEL)",
+    )
+    parser.add_argument(
+        "--translation-prompt",
+        default=os.getenv("TRANSLATION_PROMPT_PATH"),
+        help=(
+            "Path to the translation system prompt "
+            "(defaults to TRANSLATION_PROMPT_PATH or prompts/korean-thai-livestream.md)"
+        ),
     )
 
 
@@ -346,11 +320,52 @@ def is_filler_block(block: SRTBlock) -> bool:
     if not text:
         return True
     normalized = normalize_text_for_matching(text)
-    return normalized in NORMALIZED_FILLER_WORDS
+    return normalized in NORMALIZED_FILLER_WORDS or is_filler_noise_text(normalized)
+
+
+def is_filler_noise_text(normalized_text: str) -> bool:
+    if len(normalized_text) < 2:
+        return False
+    return all(char in FILLER_NOISE_CHARS for char in normalized_text)
+
+
+def tokenize_for_noise_detection(text: str) -> list[str]:
+    return [
+        normalize_text_for_matching(token)
+        for token in re.split(r"\s+", text)
+        if normalize_text_for_matching(token)
+    ]
+
+
+def is_repeated_character_noise(normalized_text: str) -> bool:
+    if len(normalized_text) < REPEATED_CHAR_MIN_LENGTH:
+        return False
+
+    dominant_char_count = max(normalized_text.count(char) for char in set(normalized_text))
+    return dominant_char_count / len(normalized_text) >= REPEATED_CHAR_DOMINANCE_RATIO
+
+
+def is_repeated_filler_noise_block(block: SRTBlock) -> bool:
+    start_seconds, end_seconds = block_times(block)
+    if end_seconds - start_seconds < REPEATED_FILLER_MIN_SECONDS:
+        return False
+
+    tokens = tokenize_for_noise_detection(block_text(block))
+    if len(tokens) == 1 and is_repeated_character_noise(tokens[0]):
+        return True
+
+    if len(tokens) < REPEATED_FILLER_MIN_TOKENS:
+        return False
+
+    return all(token in NORMALIZED_FILLER_WORDS or is_filler_noise_text(token) for token in tokens)
 
 
 def remove_filler_blocks(blocks: list[SRTBlock]) -> list[SRTBlock]:
-    return [block for block in blocks if not is_filler_block(block)]
+    return [
+        block
+        for block in blocks
+        if not is_filler_block(block) and not is_repeated_filler_noise_block(block)
+    ]
 
 
 def remove_repeated_long_runs(blocks: list[SRTBlock]) -> list[SRTBlock]:
@@ -462,6 +477,27 @@ def render_srt(blocks: Sequence[SRTBlock]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def resolve_prompt_path(prompt_path: str | None) -> Path:
+    if not prompt_path:
+        return DEFAULT_TRANSLATION_PROMPT_PATH
+
+    path = Path(prompt_path).expanduser()
+    if path.is_absolute():
+        return path
+    return Path.cwd() / path
+
+
+def load_translation_system_prompt(prompt_path: str | None) -> str:
+    path = resolve_prompt_path(prompt_path)
+    if not path.is_file():
+        raise PipelineError(f"Translation prompt file not found: {path}")
+
+    prompt = path.read_text(encoding="utf-8").strip()
+    if not prompt:
+        raise PipelineError(f"Translation prompt file is empty: {path}")
+    return prompt
+
+
 def parse_srt(content: str) -> list[SRTBlock]:
     normalized = content.replace("\r\n", "\n").strip()
     if not normalized:
@@ -526,6 +562,83 @@ def choose_whisper_device() -> tuple[str, bool]:
     if torch.cuda.is_available():
         return "cuda", True
     return "cpu", False
+
+
+def get_env_float(name: str, default: float, *, minimum: float | None = None) -> float:
+    raw_value = os.getenv(name, str(default)).strip()
+    if not raw_value:
+        return default
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise PipelineError(f"{name} must be a number.") from exc
+    if minimum is not None and value < minimum:
+        raise PipelineError(f"{name} must be greater than or equal to {minimum}.")
+    return value
+
+
+def get_env_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name, "").strip().lower()
+    if not raw_value:
+        return default
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise PipelineError(f"{name} must be one of: true, false, 1, 0, yes, no, on, off.")
+
+
+def get_optional_env_bool(name: str) -> bool | None:
+    raw_value = os.getenv(name, "").strip().lower()
+    if not raw_value:
+        return None
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise PipelineError(f"{name} must be one of: true, false, 1, 0, yes, no, on, off.")
+
+
+def get_whisper_model_name() -> str:
+    return os.getenv("WHISPER_MODEL", "large-v3").strip() or "large-v3"
+
+
+def get_whisper_temperature_values() -> tuple[float, ...]:
+    raw_value = os.getenv("WHISPER_TEMPERATURES", "0,0.2,0.4,0.6").strip()
+    if not raw_value:
+        return (0.0, 0.2, 0.4, 0.6)
+
+    values: list[float] = []
+    for part in raw_value.split(","):
+        cleaned = part.strip()
+        if not cleaned:
+            continue
+        try:
+            temperature = float(cleaned)
+        except ValueError as exc:
+            raise PipelineError("WHISPER_TEMPERATURES must be comma-separated numbers.") from exc
+        if temperature < 0:
+            raise PipelineError("WHISPER_TEMPERATURES values must be greater than or equal to 0.")
+        values.append(temperature)
+
+    if not values:
+        raise PipelineError("WHISPER_TEMPERATURES must contain at least one number.")
+    return tuple(values)
+
+
+def get_whisper_word_timestamps(device: str) -> bool:
+    configured_value = get_optional_env_bool("WHISPER_WORD_TIMESTAMPS")
+    if configured_value is not None:
+        if configured_value and device == "mps":
+            print(
+                "Warning: WHISPER_WORD_TIMESTAMPS=true is not supported on MPS by openai-whisper; "
+                "using false. Set WHISPER_DEVICE=cpu to enable it.",
+                file=sys.stderr,
+            )
+            return False
+        return configured_value
+
+    return device != "mps"
 
 
 def get_transcribe_chunk_seconds() -> float:
@@ -598,14 +711,16 @@ def block_belongs_to_chunk(block: SRTBlock, *, owned_start: float, owned_end: fl
     return owned_start <= midpoint < owned_end
 
 
-def load_whisper_model() -> tuple[object, bool]:
+def load_whisper_model() -> tuple[object, bool, str]:
     require_module("whisper", "openai-whisper")
     import whisper  # type: ignore
 
     device, use_fp16 = choose_whisper_device()
+    model_name = get_whisper_model_name()
     precision_label = "fp16" if use_fp16 else "fp32"
+    print(f"Using Whisper model: {model_name}", file=sys.stderr)
     print(f"Using Whisper device: {device} ({precision_label})", file=sys.stderr)
-    return whisper.load_model("large-v3", device=device), use_fp16
+    return whisper.load_model(model_name, device=device), use_fp16, device
 
 
 def transcribe_audio_with_model(
@@ -614,17 +729,23 @@ def transcribe_audio_with_model(
     *,
     timestamp_offset_seconds: float = 0.0,
     use_fp16: bool,
+    device: str,
 ) -> list[SRTBlock]:
     result = model.transcribe(
         str(audio_path),
         language="ko",
         fp16=use_fp16,
-        temperature=0.0,
+        temperature=get_whisper_temperature_values(),
         condition_on_previous_text=False,
-        no_speech_threshold=0.45,
-        compression_ratio_threshold=2.0,
-        logprob_threshold=-0.8,
-        hallucination_silence_threshold=1.0,
+        no_speech_threshold=get_env_float("WHISPER_NO_SPEECH_THRESHOLD", 0.6, minimum=0.0),
+        compression_ratio_threshold=get_env_float("WHISPER_COMPRESSION_RATIO_THRESHOLD", 1.8, minimum=0.0),
+        logprob_threshold=get_env_float("WHISPER_LOGPROB_THRESHOLD", -1.0),
+        word_timestamps=get_whisper_word_timestamps(device),
+        hallucination_silence_threshold=get_env_float(
+            "WHISPER_HALLUCINATION_SILENCE_THRESHOLD",
+            1.0,
+            minimum=0.0,
+        ),
     )
     segments = result.get("segments") or []
 
@@ -652,12 +773,13 @@ def transcribe_audio_with_model(
 
 
 def transcribe_audio(audio_path: Path, *, timestamp_offset_seconds: float = 0.0) -> list[SRTBlock]:
-    model, use_fp16 = load_whisper_model()
+    model, use_fp16, device = load_whisper_model()
     return transcribe_audio_with_model(
         model,
         audio_path,
         timestamp_offset_seconds=timestamp_offset_seconds,
         use_fp16=use_fp16,
+        device=device,
     )
 
 
@@ -679,7 +801,7 @@ def transcribe_audio_in_chunks(
         f"Step 2/2: Transcribing Korean audio with Whisper large-v3 in {total_chunks} chunks..."
     )
 
-    model, use_fp16 = load_whisper_model()
+    model, use_fp16, device = load_whisper_model()
     combined_blocks: list[SRTBlock] = []
 
     for chunk_index in range(total_chunks):
@@ -705,6 +827,7 @@ def transcribe_audio_in_chunks(
             chunk_audio_path,
             timestamp_offset_seconds=timestamp_offset_seconds + extract_start_seconds,
             use_fp16=use_fp16,
+            device=device,
         )
 
         owned_start_seconds = timestamp_offset_seconds + chunk_start_seconds
@@ -931,6 +1054,7 @@ def translate_srt_chunk(
     client: object,
     *,
     model_name: str,
+    system_prompt: str,
     chunk_blocks: Sequence[SRTBlock],
     chunk_number: int,
     total_chunks: int,
@@ -949,7 +1073,7 @@ def translate_srt_chunk(
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": TEXT_TRANSLATION_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
             )
@@ -1002,6 +1126,7 @@ def translate_srt(
     base_url: str,
     api_key: str,
     model_name: str,
+    system_prompt: str,
 ) -> str:
     require_module("openai", "openai")
     from openai import OpenAI  # type: ignore
@@ -1029,6 +1154,7 @@ def translate_srt(
         translated_chunk_blocks = translate_srt_chunk(
             client,
             model_name=model_name,
+            system_prompt=system_prompt,
             chunk_blocks=chunk_blocks_list,
             chunk_number=chunk_index,
             total_chunks=len(chunks),
@@ -1214,6 +1340,7 @@ def run_translate(args: argparse.Namespace, input_srt_path: Path, output_dir: Pa
     base_url = normalize_base_url(require_env_or_arg("LLM_BASE_URL", args.llm_base_url))
     api_key = resolve_api_key(args.llm_api_key, base_url)
     model_name = require_env_or_arg("LLM_MODEL", args.llm_model)
+    system_prompt = load_translation_system_prompt(args.translation_prompt)
     translated_srt_path = derived_output_path(output_dir, input_srt_path, ".translated.srt")
 
     print_step("Step 1/1: Translating subtitles to Thai...")
@@ -1223,6 +1350,7 @@ def run_translate(args: argparse.Namespace, input_srt_path: Path, output_dir: Pa
         base_url=base_url,
         api_key=api_key,
         model_name=model_name,
+        system_prompt=system_prompt,
     )
     translated_srt_path.write_text(translated_content, encoding="utf-8")
     verify_output_files([translated_srt_path])
