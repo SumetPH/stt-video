@@ -641,6 +641,10 @@ def get_whisper_word_timestamps(device: str) -> bool:
     return device != "mps"
 
 
+def get_snap_start_to_first_word() -> bool:
+    return get_env_bool("WHISPER_SNAP_START_TO_FIRST_WORD", True)
+
+
 def get_transcribe_chunk_seconds() -> float:
     raw_value = os.getenv("WHISPER_CHUNK_SECONDS", "900").strip()
     if not raw_value:
@@ -723,6 +727,37 @@ def load_whisper_model() -> tuple[object, bool, str]:
     return whisper.load_model(model_name, device=device), use_fp16, device
 
 
+def first_word_start_seconds(segment: object) -> float | None:
+    if not isinstance(segment, dict):
+        return None
+
+    words = segment.get("words")
+    if not isinstance(words, list):
+        return None
+
+    for word in words:
+        if not isinstance(word, dict):
+            continue
+        try:
+            return float(word["start"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return None
+
+
+def segment_times_seconds(segment: dict[str, object], *, snap_start_to_first_word: bool) -> tuple[float, float]:
+    start_seconds = float(segment.get("start", 0.0))
+    end_seconds = float(segment.get("end", 0.0))
+
+    if snap_start_to_first_word:
+        word_start_seconds = first_word_start_seconds(segment)
+        if word_start_seconds is not None and word_start_seconds > start_seconds:
+            start_seconds = word_start_seconds
+
+    return start_seconds, max(end_seconds, start_seconds)
+
+
 def transcribe_audio_with_model(
     model: object,
     audio_path: Path,
@@ -733,7 +768,7 @@ def transcribe_audio_with_model(
 ) -> list[SRTBlock]:
     result = model.transcribe(
         str(audio_path),
-        language="ko",
+        language=os.getenv("WHISPER_LANGUAGE", "ko"),
         fp16=use_fp16,
         temperature=get_whisper_temperature_values(),
         condition_on_previous_text=False,
@@ -748,19 +783,24 @@ def transcribe_audio_with_model(
         ),
     )
     segments = result.get("segments") or []
+    snap_start_to_first_word = get_snap_start_to_first_word()
 
     blocks: list[SRTBlock] = []
     for segment in segments:
         text = normalize_whitespace(str(segment.get("text", "")))
         if not text:
             continue
+        start_seconds, end_seconds = segment_times_seconds(
+            segment,
+            snap_start_to_first_word=snap_start_to_first_word,
+        )
 
         blocks.append(
             SRTBlock(
                 index="",
                 timestamp=(
-                    f"{format_srt_timestamp(float(segment.get('start', 0.0)) + timestamp_offset_seconds)} --> "
-                    f"{format_srt_timestamp(float(segment.get('end', 0.0)) + timestamp_offset_seconds)}"
+                    f"{format_srt_timestamp(start_seconds + timestamp_offset_seconds)} --> "
+                    f"{format_srt_timestamp(end_seconds + timestamp_offset_seconds)}"
                 ),
                 text_lines=[text],
             )

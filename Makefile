@@ -3,12 +3,13 @@ VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_PIP := $(VENV_DIR)/bin/pip
 
-.PHONY: help venv install transcribe translate burn all clean
+.PHONY: help venv install transcribe translate burn all clean ui
 
 help:
 	@printf "Targets:\n"
 	@printf "  make venv                         Create .venv\n"
 	@printf "  make install                      Install Python dependencies into .venv\n"
+	@printf "  make ui                           Start Web UI (FastAPI) and open in browser\n"
 	@printf "  make transcribe VIDEO=video.mp4   Create audio.wav and raw.srt\n"
 	@printf "  make translate SRT=raw.srt        Create translated.srt\n"
 	@printf "  make burn VIDEO=video.mp4 SRT=translated.srt  Create output.mp4\n"
@@ -56,3 +57,8 @@ all:
 
 clean:
 	rm -rf __pycache__
+
+ui: install
+	@echo "Starting Web UI..."
+	@sleep 1.5 && open http://127.0.0.1:8000 &
+	$(VENV_PYTHON) web_ui/server.py

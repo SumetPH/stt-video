@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STT Video Pipeline UI</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Lucide Icons (CDN) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="glass-bg"></div>
+    <div class="glow-orb" id="orb-1"></div>
+    <div class="glow-orb" id="orb-2"></div>
+
+    <div class="app-container">
+      <!-- Sidebar / Navigation -->
+      <aside class="sidebar">
+        <div class="logo-area">
+          <div class="logo-icon">
+            <i data-lucide="zap" class="pulse-icon"></i>
+          </div>
+          <div>
+            <h1>STT Pipeline</h1>
+            <span class="version-tag">v1.0.0</span>
+          </div>
+        </div>
+
+        <nav class="nav-menu">
+          <button class="nav-item active" data-tab="pipeline">
+            <i data-lucide="play-circle"></i>
+            <span>Full Pipeline</span>
+          </button>
+          <button class="nav-item" data-tab="steps">
+            <i data-lucide="sliders"></i>
+            <span>Step by Step</span>
+          </button>
+          <button class="nav-item" data-tab="files">
+            <i data-lucide="folder-open"></i>
+            <span>File Manager</span>
+          </button>
+          <button class="nav-item" data-tab="settings">
+            <i data-lucide="settings"></i>
+            <span>Environment</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-status">
+          <div class="status-header">System Health</div>
+          <div class="status-row">
+            <span class="status-label">FFmpeg</span>
+            <span id="status-ffmpeg" class="status-badge checking"
+              >Checking...</span
+            >
+          </div>
+          <div class="status-row">
+            <span class="status-label">Streamlink</span>
+            <span id="status-streamlink" class="status-badge checking"
+              >Checking...</span
+            >
+          </div>
+          <div class="status-row flex-col">
+            <span class="status-label">Whisper Device</span>
+            <span id="status-whisper" class="status-val">Loading...</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Header -->
+        <header class="app-header">
+          <div class="header-title">
+            <h2 id="current-tab-title">Full Pipeline Run</h2>
+            <p id="current-tab-desc">
+              สั่งดาวน์โหลดวิดีโอและทำซับไตเติลภาษาไทยเสร็จสิ้นในขั้นตอนเดียว
+            </p>
+          </div>
+          <div class="user-action">
+            <button class="btn btn-secondary btn-icon" id="btn-refresh-status">
+              <i data-lucide="refresh-cw"></i>
+              <span>Sync</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Tab Content: Pipeline -->
+        <section class="tab-content active" id="tab-pipeline">
+          <div class="card card-hero">
+            <div class="card-body">
+              <form id="form-full-pipeline">
+                <!-- Segmented Control for Input Mode -->
+                <div class="input-toggle-group">
+                  <button
+                    type="button"
+                    class="input-toggle-btn active"
+                    id="btn-input-url"
+                    onclick="switchInputMode('url')"
+                  >
+                    วิดีโอจาก URL
+                  </button>
+                  <button
+                    type="button"
+                    class="input-toggle-btn"
+                    id="btn-input-local"
+                    onclick="switchInputMode('local')"
+                  >
+                    วิดีโอในเครื่อง (Local)
+                  </button>
+                </div>
+
+                <!-- URL Video Section -->
+                <div id="section-url-input">
+                  <div
+                    class="form-row"
+                    style="
+                      grid-template-columns: 3fr 1fr;
+                      gap: 1rem;
+                      margin-bottom: 1.25rem;
+                    "
+                  >
+                    <div class="form-group">
+                      <label for="pipe-url"
+                        >URL วิดีโอ (Chzzk / Naver Video)</label
+                      >
+                      <div class="input-with-icon">
+                        <input
+                          type="url"
+                          id="pipe-url"
+                          required
+                          placeholder="https://chzzk.naver.com/video/..."
+                          value=""
+                        />
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-source-lang">ภาษาต้นทาง (Source)</label>
+                      <select id="pipe-source-lang">
+                        <option value="ko" selected>เกาหลี (Korean)</option>
+                        <option value="zh">จีน (Chinese)</option>
+                        <option value="ja">ญี่ปุ่น (Japanese)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Local Video Section -->
+                <div id="section-local-input" class="hidden">
+                  <div
+                    class="form-row"
+                    style="
+                      grid-template-columns: 3fr 1fr;
+                      gap: 1rem;
+                      margin-bottom: 1.25rem;
+                    "
+                  >
+                    <div class="form-group">
+                      <label for="pipe-local-video"
+                        >เลือกไฟล์วิดีโอในเครื่อง</label
+                      >
+                      <select id="pipe-local-video" class="file-select">
+                        <option value="">-- เลือกไฟล์วิดีโอ --</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-source-lang-local"
+                        >ภาษาต้นทาง (Source)</label
+                      >
+                      <select id="pipe-source-lang-local">
+                        <option value="ko" selected>เกาหลี (Korean)</option>
+                        <option value="zh">จีน (Chinese)</option>
+                        <option value="ja">ญี่ปุ่น (Japanese)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Download settings group -->
+                <div id="section-download-settings">
+                  <div class="form-row grid-3">
+                    <div class="form-group">
+                      <label for="pipe-output-name"
+                        >ชื่อไฟล์ผลลัพธ์ (ภาษาอังกฤษ/ตัวเลข)</label
+                      >
+                      <input
+                        type="text"
+                        id="pipe-output-name"
+                        placeholder="เช่น 13469305 (เว้นว่างไว้จะใช้ ID จาก URL)"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-offset"
+                        >เริ่มต้นจากเวลา (hh:mm:ss)</label
+                      >
+                      <input
+                        type="text"
+                        id="pipe-offset"
+                        value="00:00:00"
+                        placeholder="เช่น 00:05:00"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-duration"
+                        >ระยะเวลาที่จะโหลด (hh:mm:ss)</label
+                      >
+                      <input
+                        type="text"
+                        id="pipe-duration"
+                        value=""
+                        placeholder="เว้นว่างเพื่อโหลดทั้งหมด"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="advanced-panel hidden" id="pipe-advanced">
+                  <div class="form-row grid-3" id="pipe-advanced-grid">
+                    <div class="form-group" id="group-pipe-quality">
+                      <label for="pipe-quality"
+                        >คุณภาพวิดีโอ (Streamlink)</label
+                      >
+                      <select id="pipe-quality">
+                        <option value="best" selected>Best (ชัดสุด)</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="worst">Worst (ต่ำสุด)</option>
+                      </select>
+                    </div>
+                    <div class="form-group" id="group-pipe-threads">
+                      <label for="pipe-threads">Threads ดาวน์โหลด</label>
+                      <input
+                        type="number"
+                        id="pipe-threads"
+                        value="8"
+                        min="1"
+                        max="16"
+                      />
+                    </div>
+                    <div class="form-group" id="group-pipe-font">
+                      <label for="pipe-font"
+                        >ฟอนต์ซับไตเติล (หากต้องการ Burn Hard Sub)</label
+                      >
+                      <select id="pipe-font">
+                        <option value="" selected>
+                          Mux Soft Sub เท่านั้น (เร็วมาก - แนะนำ)
+                        </option>
+                        <option value="Sarabun">Sarabun (ฝัง Hard Sub)</option>
+                        <option value="Noto Sans Thai">
+                          Noto Sans Thai (ฝัง Hard Sub)
+                        </option>
+                        <option value="TH Sarabun New">
+                          TH Sarabun New (ฝัง Hard Sub)
+                        </option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-timing-mode">โหมดจับเวลาซับ</label>
+                      <select id="pipe-timing-mode">
+                        <option value="auto" selected>
+                          เร็วอัตโนมัติ (ใช้ MPS ถ้ามี)
+                        </option>
+                        <option value="word_cpu">
+                          แม่นยำขึ้นบน M-series (CPU + word timestamp)
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary btn-large">
+                    <i data-lucide="play"></i>
+                    <span>เริ่มทำงาน Pipeline</span>
+                  </button>
+                  <div
+                    class="advanced-toggle"
+                    id="btn-pipe-advanced-toggle"
+                    onclick="toggleAdvanced('pipe-advanced')"
+                  >
+                    <span>ตั้งค่าเพิ่มเติม</span>
+                    <i data-lucide="chevron-down" id="pipe-advanced-icon"></i>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab Content: Steps -->
+        <section class="tab-content" id="tab-steps">
+          <div class="steps-grid">
+            <!-- Step 1: Download -->
+            <div class="card step-card">
+              <div class="step-num">01</div>
+              <div class="card-header">
+                <h3>ดาวน์โหลดวิดีโอ</h3>
+                <p>ดึงวิดีโอด้วย Streamlink</p>
+              </div>
+              <div class="card-body">
+                <form id="form-step-download">
+                  <div class="form-group">
+                    <label>URL วิดีโอ</label>
+                    <input
+                      type="url"
+                      id="step1-url"
+                      required
+                      placeholder="https://chzzk.naver.com/... or any m3u8"
+                    />
+                  </div>
+                  <div class="form-row grid-2">
+                    <div class="form-group">
+                      <label>ชื่อไฟล์ผลลัพธ์</label>
+                      <input
+                        type="text"
+                        id="step1-output"
+                        placeholder="เว้นเพื่อใช้ ID อัตโนมัติ"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label>คุณภาพวิดีโอ (Streamlink)</label>
+                      <select id="step1-quality">
+                        <option value="best" selected>Best (ชัดสุด)</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                        <option value="360p">360p</option>
+                        <option value="worst">Worst (ต่ำสุด)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-row grid-2">
+                    <div class="form-group">
+                      <label>เริ่มต้นจากเวลา (hh:mm:ss)</label>
+                      <input type="text" id="step1-offset" value="00:00:00" />
+                    </div>
+                    <div class="form-group">
+                      <label>ระยะเวลา (hh:mm:ss)</label>
+                      <input type="text" id="step1-duration" value="" placeholder="เว้นว่างเพื่อโหลดทั้งหมด" />
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-secondary w-full">
+                    <i data-lucide="download"></i>
+                    <span>ดาวน์โหลด</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Step 2: Transcribe -->
+            <div class="card step-card">
+              <div class="step-num">02</div>
+              <div class="card-header">
+                <h3>ถอดความ (Whisper)</h3>
+                <p>แปลงเสียงวิดีโอเกาหลีเป็น SRT</p>
+              </div>
+              <div class="card-body">
+                <form id="form-step-transcribe">
+                  <div class="form-group">
+                    <label>เลือกไฟล์วิดีโอ</label>
+                    <select id="step2-video" class="file-select" required>
+                      <option value="">-- เลือกไฟล์จากเครื่อง --</option>
+                    </select>
+                  </div>
+                  <div class="form-row grid-2">
+                    <div class="form-group">
+                      <label>ตัดเริ่มต้นที่ (hh:mm:ss)</label>
+                      <input
+                        type="text"
+                        id="step2-start"
+                        placeholder="00:00:00"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label>ความยาว (วินาที)</label>
+                      <input
+                        type="number"
+                        id="step2-duration"
+                        placeholder="เช่น 300"
+                      />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="step2-source-lang"
+                      >ภาษาต้นทาง (Source Language)</label
+                    >
+                    <select id="step2-source-lang">
+                      <option value="ko" selected>เกาหลี (Korean)</option>
+                      <option value="zh">จีน (Chinese)</option>
+                      <option value="ja">ญี่ปุ่น (Japanese)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="step2-timing-mode">โหมดจับเวลาซับ</label>
+                    <select id="step2-timing-mode">
+                      <option value="auto" selected>
+                        เร็วอัตโนมัติ (ใช้ MPS ถ้ามี)
+                      </option>
+                      <option value="word_cpu">
+                        แม่นยำขึ้นบน M-series (CPU + word timestamp)
+                      </option>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn btn-secondary w-full">
+                    <i data-lucide="disc"></i>
+                    <span>ถอดความ</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Step 3: Translate -->
+            <div class="card step-card">
+              <div class="step-num">03</div>
+              <div class="card-header">
+                <h3>แปลซับไทย (LLM)</h3>
+                <p>แปลไฟล์ SRT ด้วย AI API</p>
+              </div>
+              <div class="card-body">
+                <form id="form-step-translate">
+                  <div class="form-group">
+                    <label>เลือกไฟล์ SRT</label>
+                    <select id="step3-srt" class="file-select" required>
+                      <option value="">-- เลือกไฟล์ SRT --</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="step3-source-lang"
+                      >ภาษาต้นทาง (Source Language)</label
+                    >
+                    <select id="step3-source-lang">
+                      <option value="ko" selected>เกาหลี (Korean)</option>
+                      <option value="zh">จีน (Chinese)</option>
+                      <option value="ja">ญี่ปุ่น (Japanese)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>โมเดล AI (เว้นว่างไว้เพื่อใช้ใน .env)</label>
+                    <input
+                      type="text"
+                      id="step3-model"
+                      placeholder="เช่น gemini-2.0-flash"
+                    />
+                  </div>
+                  <button type="submit" class="btn btn-secondary w-full">
+                    <i data-lucide="languages"></i>
+                    <span>แปลภาษา</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Step 4: Integrate -->
+            <div class="card step-card">
+              <div class="step-num">04</div>
+              <div class="card-header">
+                <h3>รวมซับเข้าวิดีโอ</h3>
+                <p>ฝังหรือมิวซ์ซับไตเติล</p>
+              </div>
+              <div class="card-body">
+                <form id="form-step-integrate">
+                  <div class="form-group">
+                    <label>เลือกไฟล์วิดีโอ</label>
+                    <select id="step4-video" class="file-select" required>
+                      <option value="">-- เลือกไฟล์วิดีโอ --</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>เลือกไฟล์ซับไตเติล (ไทย)</label>
+                    <select id="step4-srt" class="file-select" required>
+                      <option value="">-- เลือกไฟล์ซับไตเติล --</option>
+                    </select>
+                  </div>
+                  <div class="form-row grid-2">
+                    <div class="form-group">
+                      <label>โหมด</label>
+                      <select id="step4-mode">
+                        <option value="mux" selected>Mux Soft Sub (MKV)</option>
+                        <option value="burn">Burn Hard Sub (MP4)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>ฟอนต์ (เฉพาะ Hard Sub)</label>
+                      <input type="text" id="step4-font" value="Sarabun" />
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-secondary w-full">
+                    <i data-lucide="combine"></i>
+                    <span>ฝังซับไตเติล</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab Content: Files -->
+        <section class="tab-content" id="tab-files">
+          <div class="file-manager-layout">
+            <!-- File Navigator Side -->
+            <div class="card file-list-card">
+              <div class="tabs-sub">
+                <button class="tab-sub-btn active" data-subdir="download">
+                  วิดีโอที่ดาวน์โหลด
+                </button>
+                <button class="tab-sub-btn" data-subdir="raw_srt">
+                  ซับถอดความ (SRT)
+                </button>
+                <button class="tab-sub-btn" data-subdir="translated_srt">
+                  ซับแปลไทย (SRT)
+                </button>
+                <button class="tab-sub-btn" data-subdir="output_video">
+                  วิดีโอผลลัพธ์
+                </button>
+              </div>
+              <div class="file-table-container">
+                <table class="file-table">
+                  <thead>
+                    <tr>
+                      <th>ชื่อไฟล์</th>
+                      <th>ขนาด</th>
+                      <th>แก้ไขล่าสุด</th>
+                      <th class="text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="file-table-body">
+                    <tr>
+                      <td colspan="4" class="text-center text-muted">
+                        กำลังโหลดรายการไฟล์...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab Content: Settings -->
+        <section class="tab-content" id="tab-settings">
+          <div class="card">
+            <div class="card-header">
+              <h3>การตั้งค่าปัจจุบัน (.env)</h3>
+              <p>ค่าคอนฟิกที่แอปพลิเคชันกำลังใช้งานอยู่ในไฟล์สิ่งแวดล้อม</p>
+            </div>
+            <div class="card-body">
+              <div class="settings-grid" id="settings-container">
+                <p class="text-muted">กำลังโหลดค่าสิ่งแวดล้อม...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Job Queue / Progress Panel (Always visible at the bottom when there are running tasks) -->
+        <section class="job-monitor-panel">
+          <div class="panel-header">
+            <div class="flex items-center gap-2">
+              <span class="active-job-indicator hidden" id="job-spinner"></span>
+              <h3>สถานะการทำงานปัจจุบัน</h3>
+            </div>
+            <div class="panel-actions">
+              <button class="btn btn-danger btn-xs hidden" id="btn-cancel-job">
+                <i data-lucide="square"></i> Stop Task
+              </button>
+            </div>
+          </div>
+
+          <div class="job-progress-wrapper" id="job-info-area">
+            <div class="text-muted text-center py-4">
+              ไม่มีงานใดรันอยู่ขณะนี้ สามารถเลือกคำสั่งด้านบนเพื่อเริ่มต้นงานได้
+            </div>
+          </div>
+
+          <!-- Logger Terminal Output -->
+          <div class="terminal-container hidden" id="terminal-wrapper">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <span class="terminal-title">stt-pipeline logs</span>
+              <button class="btn-terminal-clear" onclick="clearTerminal()">
+                <i data-lucide="trash-2"></i> Clear
+              </button>
+            </div>
+            <div class="terminal-body" id="terminal-console">
+              <!-- log output goes here -->
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Main App Logic -->
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -74,6 +74,7 @@ LLM_API_KEY=""
 - `WHISPER_COMPRESSION_RATIO_THRESHOLD` threshold สำหรับจับข้อความวนซ้ำแล้ว retry ค่า default คือ `1.8`
 - `WHISPER_LOGPROB_THRESHOLD` threshold confidence ของ Whisper ค่า default คือ `-1.0`
 - `WHISPER_WORD_TIMESTAMPS` เปิด word timestamp เพื่อช่วยจับ hallucination ช่วงเงียบ ค่า default คือ `true` บน CPU/CUDA และ `false` บน MPS
+- `WHISPER_SNAP_START_TO_FIRST_WORD` ขยับเวลาเริ่ม subtitle block ไปที่คำแรกจริงเมื่อมี word timestamp เพื่อลดอาการซับขึ้นรอก่อนพูด ค่า default คือ `true`
 - `WHISPER_HALLUCINATION_SILENCE_THRESHOLD` threshold ตัด hallucination รอบช่วงเงียบ ค่า default คือ `1.0`
 - `WHISPER_CHUNK_SECONDS` ความยาวต่อ chunk ตอนถอดเสียง ค่า default คือ `900`
 - `WHISPER_CHUNK_OVERLAP_SECONDS` overlap ระหว่าง chunk ค่า default คือ `1.5`
