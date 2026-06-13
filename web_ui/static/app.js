@@ -532,8 +532,9 @@ function connectLogStream(jobId) {
             return;
         }
         
-        // Re-construct newline
-        const lineText = logLine.replace(/\\n/g, '\n');
+        // Re-construct newline and carriage return
+        const lineText = logLine.replace(/\\n/g, '\n').replace(/\\r/g, '');
+        const isCarriageReturn = logLine.includes('\\r');
         
         // Styling logs
         let type = 'output';
@@ -541,7 +542,7 @@ function connectLogStream(jobId) {
         else if (lineText.startsWith('[WARNING]')) type = 'warning';
         else if (lineText.includes('[ERROR]') || lineText.startsWith('Error')) type = 'error';
         
-        appendLog(lineText, type);
+        appendLog(lineText, type, isCarriageReturn);
     };
 
     logEventSource.onerror = (err) => {
@@ -614,12 +615,18 @@ async function cancelJob(jobId) {
 }
 
 // Append line to terminal console
-function appendLog(text, type = 'output') {
+function appendLog(text, type = 'output', isCarriageReturn = false) {
     const consoleEl = document.getElementById('terminal-console');
     if (!consoleEl) return;
     
+    if (isCarriageReturn && consoleEl.lastElementChild && consoleEl.lastElementChild.classList.contains('log-cr')) {
+        consoleEl.lastElementChild.textContent = text;
+        return;
+    }
+    
     const line = document.createElement('div');
     line.className = `terminal-line ${type}`;
+    if (isCarriageReturn) line.classList.add('log-cr');
     line.textContent = text;
     
     consoleEl.appendChild(line);

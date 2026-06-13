@@ -112,13 +112,29 @@ async def run_job_process(job_id: str, cmd: List[str], label: str, output_check_
         )
         job_processes[job_id] = process
         
-        # Stream output line by line
+        # Stream output chunk by chunk to handle \r progress updates
+        buffer = ""
         while True:
-            line = await process.stdout.readline()
-            if not line:
+            chunk = await process.stdout.read(1024)
+            if not chunk:
+                if buffer:
+                    job_logs[job_id].append(buffer)
                 break
-            decoded = line.decode('utf-8', errors='replace')
-            job_logs[job_id].append(decoded)
+            
+            buffer += chunk.decode('utf-8', errors='replace')
+            while True:
+                if '\n' in buffer and '\r' in buffer:
+                    idx = min(buffer.find('\n'), buffer.find('\r'))
+                elif '\n' in buffer:
+                    idx = buffer.find('\n')
+                elif '\r' in buffer:
+                    idx = buffer.find('\r')
+                else:
+                    break
+                    
+                line = buffer[:idx+1]
+                buffer = buffer[idx+1:]
+                job_logs[job_id].append(line)
             
         await process.wait()
         
@@ -171,6 +187,7 @@ async def run_download_and_remux_job(
             "streamlink", url, quality,
             "--stream-segment-threads", str(threads),
             "--hls-start-offset", start_offset,
+            "--progress", "force",
             "-o", str(temp_file)
         ]
         if duration:
@@ -252,6 +269,7 @@ async def run_full_pipeline(
                 "streamlink", url, quality,
                 "--stream-segment-threads", str(threads),
                 "--hls-start-offset", start_offset,
+                "--progress", "force",
                 "-o", str(temp_video_file)
             ]
             if duration:
@@ -400,12 +418,28 @@ async def run_step(job_id: str, cmd: List[str], env_vars: Optional[dict] = None)
         )
         job_processes[job_id] = process
         
+        buffer = ""
         while True:
-            line = await process.stdout.readline()
-            if not line:
+            chunk = await process.stdout.read(1024)
+            if not chunk:
+                if buffer:
+                    job_logs[job_id].append(buffer)
                 break
-            decoded = line.decode('utf-8', errors='replace')
-            job_logs[job_id].append(decoded)
+                
+            buffer += chunk.decode('utf-8', errors='replace')
+            while True:
+                if '\n' in buffer and '\r' in buffer:
+                    idx = min(buffer.find('\n'), buffer.find('\r'))
+                elif '\n' in buffer:
+                    idx = buffer.find('\n')
+                elif '\r' in buffer:
+                    idx = buffer.find('\r')
+                else:
+                    break
+                    
+                line = buffer[:idx+1]
+                buffer = buffer[idx+1:]
+                job_logs[job_id].append(line)
             
         await process.wait()
         
@@ -753,8 +787,8 @@ async def get_job_logs_stream(job_id: str):
             if last_idx < current_len:
                 for i in range(last_idx, current_len):
                     line = job_logs[job_id][i]
-                    # Escape newlines for SSE format
-                    escaped_line = line.replace('\r', '').replace('\n', '\\n')
+                    # Escape newlines and carriage returns for SSE format
+                    escaped_line = line.replace('\n', '\\n').replace('\r', '\\r')
                     yield f"data: {escaped_line}\n\n"
                 last_idx = current_len
                 
