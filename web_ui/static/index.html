@@ -260,6 +260,17 @@
                         </option>
                       </select>
                     </div>
+                    <div class="form-group">
+                      <label for="pipe-timing-mode">โหมดจับเวลาซับ</label>
+                      <select id="pipe-timing-mode">
+                        <option value="auto" selected>
+                          เร็วอัตโนมัติ (ใช้ MPS ถ้ามี)
+                        </option>
+                        <option value="word_cpu">
+                          แม่นยำขึ้นบน M-series (CPU + word timestamp)
+                        </option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -383,6 +394,17 @@
                       <option value="ko" selected>เกาหลี (Korean)</option>
                       <option value="zh">จีน (Chinese)</option>
                       <option value="ja">ญี่ปุ่น (Japanese)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="step2-timing-mode">โหมดจับเวลาซับ</label>
+                    <select id="step2-timing-mode">
+                      <option value="auto" selected>
+                        เร็วอัตโนมัติ (ใช้ MPS ถ้ามี)
+                      </option>
+                      <option value="word_cpu">
+                        แม่นยำขึ้นบน M-series (CPU + word timestamp)
+                      </option>
                     </select>
                   </div>
                   <button type="submit" class="btn btn-secondary w-full">

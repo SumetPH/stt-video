@@ -370,6 +370,7 @@ function initForms() {
                 output_name: document.getElementById('pipe-output-name').value || null,
                 font_name: document.getElementById('pipe-font').value || null,
                 source_lang: document.getElementById('pipe-source-lang').value || "ko",
+                timing_mode: document.getElementById('pipe-timing-mode').value || "auto",
                 video_path: null
             };
         } else {
@@ -377,7 +378,8 @@ function initForms() {
                 url: null,
                 video_path: document.getElementById('pipe-local-video').value,
                 font_name: document.getElementById('pipe-font').value || null,
-                source_lang: document.getElementById('pipe-source-lang-local').value || "ko"
+                source_lang: document.getElementById('pipe-source-lang-local').value || "ko",
+                timing_mode: document.getElementById('pipe-timing-mode').value || "auto"
             };
         }
         
@@ -404,7 +406,8 @@ function initForms() {
             video_path: document.getElementById('step2-video').value,
             start_time: document.getElementById('step2-start').value || null,
             duration: document.getElementById('step2-duration').value || null,
-            source_lang: document.getElementById('step2-source-lang').value || "ko"
+            source_lang: document.getElementById('step2-source-lang').value || "ko",
+            timing_mode: document.getElementById('step2-timing-mode').value || "auto"
         };
         await startJob('/api/transcribe', body);
     });

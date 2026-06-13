@@ -51,6 +51,7 @@ class TranscribeRequest(BaseModel):
     start_time: Optional[str] = None
     duration: Optional[str] = None
     source_lang: Optional[str] = "ko"
+    timing_mode: Optional[str] = "auto"
 
 class TranslateRequest(BaseModel):
     input_srt: str
@@ -74,6 +75,20 @@ class FullPipelineRequest(BaseModel):
     font_name: Optional[str] = None
     source_lang: Optional[str] = "ko"
     video_path: Optional[str] = None
+    timing_mode: Optional[str] = "auto"
+
+
+def build_whisper_env(source_lang: Optional[str], timing_mode: Optional[str] = "auto") -> dict:
+    env_vars = {"WHISPER_LANGUAGE": source_lang or "ko"}
+    if timing_mode == "word_cpu":
+        env_vars.update(
+            {
+                "WHISPER_DEVICE": "cpu",
+                "WHISPER_WORD_TIMESTAMPS": "true",
+                "WHISPER_SNAP_START_TO_FIRST_WORD": "true",
+            }
+        )
+    return env_vars
 
 async def run_job_process(job_id: str, cmd: List[str], label: str, output_check_paths: List[Path] = None, env_vars: Optional[dict] = None):
     jobs[job_id]["status"] = "running"
@@ -243,7 +258,8 @@ async def run_full_pipeline(
     output_name: str,
     font_name: Optional[str],
     source_lang: str = "ko",
-    video_path: Optional[str] = None
+    video_path: Optional[str] = None,
+    timing_mode: str = "auto"
 ):
     jobs[job_id]["status"] = "running"
     job_logs[job_id] = []
@@ -325,7 +341,7 @@ async def run_full_pipeline(
                 trans_cmd.extend(["--duration", str(sec)])
             
     jobs[job_id]["step"] = "Transcribing"
-    success = await run_step(job_id, trans_cmd, env_vars={"WHISPER_LANGUAGE": source_lang})
+    success = await run_step(job_id, trans_cmd, env_vars=build_whisper_env(source_lang, timing_mode))
     if not success:
         return
 
@@ -622,7 +638,7 @@ async def start_transcribe(req: TranscribeRequest, background_tasks: BackgroundT
         cmd, 
         jobs[job_id]["label"], 
         [expected_srt],
-        {"WHISPER_LANGUAGE": req.source_lang}
+        build_whisper_env(req.source_lang, req.timing_mode)
     )
     
     return {"job_id": job_id, "label": jobs[job_id]["label"]}
@@ -743,7 +759,8 @@ async def start_full_pipeline(req: FullPipelineRequest, background_tasks: Backgr
         req.output_name,
         req.font_name,
         req.source_lang,
-        req.video_path
+        req.video_path,
+        req.timing_mode
     )
     
     return {"job_id": job_id, "label": jobs[job_id]["label"]}
