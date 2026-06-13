@@ -733,7 +733,7 @@ def transcribe_audio_with_model(
 ) -> list[SRTBlock]:
     result = model.transcribe(
         str(audio_path),
-        language="ko",
+        language=os.getenv("WHISPER_LANGUAGE", "ko"),
         fp16=use_fp16,
         temperature=get_whisper_temperature_values(),
         condition_on_previous_text=False,
