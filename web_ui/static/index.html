@@ -146,8 +146,45 @@
                         <option value="ko" selected>เกาหลี (Korean)</option>
                         <option value="zh">จีน (Chinese)</option>
                         <option value="ja">ญี่ปุ่น (Japanese)</option>
+                        <option value="en">อังกฤษ (English)</option>
                       </select>
                     </div>
+                  </div>
+                  
+                  <div class="form-row grid-3" style="gap: 1rem; margin-bottom: 1.25rem;">
+                    <div class="form-group">
+                      <label for="pipe-prompt-topic">ประเภทเนื้อหา (Topic)</label>
+                      <select id="pipe-prompt-topic">
+                        <option value="casual livestream" selected>ไลฟ์สตรีมทั่วไป (Casual Livestream)</option>
+                        <option value="gaming and esports">เกมเมอร์ / อีสปอร์ต (Gaming)</option>
+                        <option value="vlog and irl">Vlog / ชีวิตประจำวัน (IRL)</option>
+                        <option value="documentary and formal">สารคดี / ทางการ (Documentary)</option>
+                        <option value="educational and news">ข่าว / ให้ความรู้ (News/Ed)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-prompt-tone">น้ำเสียง (Tone)</label>
+                      <select id="pipe-prompt-tone">
+                        <option value="conversational and natural" selected>เป็นธรรมชาติ (Natural)</option>
+                        <option value="polite and formal">สุภาพ / เป็นทางการ (Polite/Formal)</option>
+                        <option value="energetic with slang">วัยรุ่น / สนุกสนาน / มีแสลง (Teen/Slang)</option>
+                        <option value="neutral and objective">เป็นกลาง (Neutral)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-prompt-speaker">สรรพนามผู้พูด (Speaker)</label>
+                      <select id="pipe-prompt-speaker">
+                        <option value="neutral" selected>ทั่วไป (Neutral)</option>
+                        <option value="female streamer using feminine Thai pronouns">ผู้หญิง (Female)</option>
+                        <option value="male streamer using masculine Thai pronouns">ผู้ชาย (Male)</option>
+                        <option value="multiple speakers, both male and female">ชายและหญิง (Male & Female)</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label for="pipe-prompt-custom">คำสั่งพิเศษเพิ่มเติม (Custom Rules - Optional)</label>
+                    <textarea id="pipe-prompt-custom" rows="2" placeholder="เช่น ทับศัพท์ชื่อเกม, ไม่ต้องแปลคำอุทานภาษาญี่ปุ่น..."></textarea>
                   </div>
                 </div>
 
@@ -177,8 +214,45 @@
                         <option value="ko" selected>เกาหลี (Korean)</option>
                         <option value="zh">จีน (Chinese)</option>
                         <option value="ja">ญี่ปุ่น (Japanese)</option>
+                        <option value="en">อังกฤษ (English)</option>
                       </select>
                     </div>
+                  </div>
+                  
+                  <div class="form-row grid-3" style="gap: 1rem; margin-bottom: 1.25rem;">
+                    <div class="form-group">
+                      <label for="pipe-prompt-topic-local">ประเภทเนื้อหา (Topic)</label>
+                      <select id="pipe-prompt-topic-local">
+                        <option value="casual livestream" selected>ไลฟ์สตรีมทั่วไป (Casual Livestream)</option>
+                        <option value="gaming and esports">เกมเมอร์ / อีสปอร์ต (Gaming)</option>
+                        <option value="vlog and irl">Vlog / ชีวิตประจำวัน (IRL)</option>
+                        <option value="documentary and formal">สารคดี / ทางการ (Documentary)</option>
+                        <option value="educational and news">ข่าว / ให้ความรู้ (News/Ed)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-prompt-tone-local">น้ำเสียง (Tone)</label>
+                      <select id="pipe-prompt-tone-local">
+                        <option value="conversational and natural" selected>เป็นธรรมชาติ (Natural)</option>
+                        <option value="polite and formal">สุภาพ / เป็นทางการ (Polite/Formal)</option>
+                        <option value="energetic with slang">วัยรุ่น / สนุกสนาน / มีแสลง (Teen/Slang)</option>
+                        <option value="neutral and objective">เป็นกลาง (Neutral)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="pipe-prompt-speaker-local">สรรพนามผู้พูด (Speaker)</label>
+                      <select id="pipe-prompt-speaker-local">
+                        <option value="neutral" selected>ทั่วไป (Neutral)</option>
+                        <option value="female streamer using feminine Thai pronouns">ผู้หญิง (Female)</option>
+                        <option value="male streamer using masculine Thai pronouns">ผู้ชาย (Male)</option>
+                        <option value="multiple speakers, both male and female">ชายและหญิง (Male & Female)</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label for="pipe-prompt-custom-local">คำสั่งพิเศษเพิ่มเติม (Custom Rules - Optional)</label>
+                    <textarea id="pipe-prompt-custom-local" rows="2" placeholder="เช่น ทับศัพท์ชื่อเกม, ไม่ต้องแปลคำอุทานภาษาญี่ปุ่น..."></textarea>
                   </div>
                 </div>
 
@@ -394,6 +468,7 @@
                       <option value="ko" selected>เกาหลี (Korean)</option>
                       <option value="zh">จีน (Chinese)</option>
                       <option value="ja">ญี่ปุ่น (Japanese)</option>
+                      <option value="en">อังกฤษ (English)</option>
                     </select>
                   </div>
                   <div class="form-group">
@@ -438,8 +513,45 @@
                       <option value="ko" selected>เกาหลี (Korean)</option>
                       <option value="zh">จีน (Chinese)</option>
                       <option value="ja">ญี่ปุ่น (Japanese)</option>
+                      <option value="en">อังกฤษ (English)</option>
                     </select>
                   </div>
+                  
+                  <div class="form-row grid-3" style="gap: 1rem; margin-bottom: 1.25rem;">
+                    <div class="form-group">
+                      <label for="step3-prompt-topic">ประเภทเนื้อหา (Topic)</label>
+                      <select id="step3-prompt-topic">
+                        <option value="casual livestream" selected>ไลฟ์สตรีมทั่วไป (Casual Livestream)</option>
+                        <option value="gaming and esports">เกมเมอร์ / อีสปอร์ต (Gaming)</option>
+                        <option value="vlog and irl">Vlog / ชีวิตประจำวัน (IRL)</option>
+                        <option value="documentary and formal">สารคดี / ทางการ (Documentary)</option>
+                        <option value="educational and news">ข่าว / ให้ความรู้ (News/Ed)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="step3-prompt-tone">น้ำเสียง (Tone)</label>
+                      <select id="step3-prompt-tone">
+                        <option value="conversational and natural" selected>เป็นธรรมชาติ (Natural)</option>
+                        <option value="polite and formal">สุภาพ / เป็นทางการ (Polite/Formal)</option>
+                        <option value="energetic with slang">วัยรุ่น / สนุกสนาน / มีแสลง (Teen/Slang)</option>
+                        <option value="neutral and objective">เป็นกลาง (Neutral)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="step3-prompt-speaker">สรรพนามผู้พูด (Speaker)</label>
+                      <select id="step3-prompt-speaker">
+                        <option value="neutral" selected>ทั่วไป (Neutral)</option>
+                        <option value="female streamer using feminine Thai pronouns">ผู้หญิง (Female)</option>
+                        <option value="male streamer using masculine Thai pronouns">ผู้ชาย (Male)</option>
+                        <option value="multiple speakers, both male and female">ชายและหญิง (Male & Female)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label for="step3-prompt-custom">คำสั่งพิเศษเพิ่มเติม (Custom Rules - Optional)</label>
+                    <textarea id="step3-prompt-custom" rows="2" placeholder="เช่น ทับศัพท์ชื่อเกม, ไม่ต้องแปลคำอุทานภาษาญี่ปุ่น..."></textarea>
+                  </div>
+                  
                   <div class="form-group">
                     <label>โมเดล AI (เว้นว่างไว้เพื่อใช้ใน .env)</label>
                     <input

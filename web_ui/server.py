@@ -53,11 +53,18 @@ class TranscribeRequest(BaseModel):
     source_lang: Optional[str] = "ko"
     timing_mode: Optional[str] = "auto"
 
+class PromptOptions(BaseModel):
+    topic: Optional[str] = "casual livestream"
+    tone: Optional[str] = "conversational and natural"
+    speaker: Optional[str] = "neutral"
+    custom_rules: Optional[str] = None
+
 class TranslateRequest(BaseModel):
     input_srt: str
     model: Optional[str] = None
     prompt_path: Optional[str] = None
     source_lang: Optional[str] = "ko"
+    prompt_options: Optional[PromptOptions] = None
 
 class IntegrateRequest(BaseModel):
     video_path: str
@@ -76,6 +83,56 @@ class FullPipelineRequest(BaseModel):
     source_lang: Optional[str] = "ko"
     video_path: Optional[str] = None
     timing_mode: Optional[str] = "auto"
+    prompt_options: Optional[PromptOptions] = None
+
+def generate_dynamic_prompt(source_lang: str, options: PromptOptions, job_id: str) -> Path:
+    lang_map = {
+        "ko": "Korean",
+        "zh": "Chinese",
+        "ja": "Japanese",
+        "en": "English"
+    }
+    src_lang_name = lang_map.get(source_lang, "Korean")
+    
+    prompt = f"You are a professional subtitle translator specializing in {src_lang_name}-to-Thai subtitles.\n"
+    prompt += f"Translate {src_lang_name} subtitle text into natural Thai.\n\n"
+    
+    prompt += "Context:\n"
+    prompt += f"- This is a {options.topic}.\n"
+    prompt += "- The subtitles may contain casual speech, slang, hesitation, filler words, and STT errors.\n"
+    prompt += "- The goal is Thai subtitles that feel natural, easy to read, and faithful to what was actually said.\n\n"
+    
+    prompt += "Tone & Style:\n"
+    prompt += f"- The tone should be {options.tone}.\n"
+    if options.speaker and options.speaker != "neutral":
+        prompt += f"- Speaker profile: {options.speaker}.\n"
+    
+    prompt += "\nHandling Multiple Speakers:\n"
+    prompt += "- **Multiple Speakers**: If the context shows a conversation between multiple people, format the translation to clarify who is speaking. For example, use a hyphen `- ` prefix at the start of a line to indicate a speaker change within a subtitle block.\n\n"
+    
+    if options.custom_rules:
+        prompt += f"Custom Rules:\n- {options.custom_rules.strip()}\n\n"
+        
+    prompt += "Rules:\n"
+    prompt += "- Translate only the subtitle text for each block.\n"
+    prompt += "- Keep the number of output blocks exactly the same as the input blocks.\n"
+    prompt += "- Keep names, nicknames, game terms, item names, and proper nouns consistent throughout the file.\n"
+    prompt += "- Do not invent missing meaning; if the source is unclear, translate conservatively.\n"
+    prompt += f"- Do not transliterate {src_lang_name} words into Thai unless they are names or proper nouns.\n"
+    prompt += "- Preserve repeated lines only if they are truly repeated in the source text.\n"
+    prompt += "- Remove obvious filler or STT noise only when doing so does not change the meaning.\n"
+    prompt += "- Keep each subtitle short and natural for reading on screen.\n"
+    prompt += "- Return only the requested block markers and Thai translations.\n"
+    prompt += "- Do not add explanations, code fences, timestamps, or extra blocks.\n"
+    
+    prompts_dir = BASE_DIR / "prompts"
+    os.makedirs(prompts_dir, exist_ok=True)
+    temp_prompt_path = prompts_dir / f"dynamic_prompt_{job_id}.md"
+    
+    with open(temp_prompt_path, "w", encoding="utf-8") as f:
+        f.write(prompt)
+        
+    return temp_prompt_path
 
 
 def build_whisper_env(source_lang: Optional[str], timing_mode: Optional[str] = "auto") -> dict:
@@ -259,7 +316,8 @@ async def run_full_pipeline(
     font_name: Optional[str],
     source_lang: str = "ko",
     video_path: Optional[str] = None,
-    timing_mode: str = "auto"
+    timing_mode: str = "auto",
+    prompt_options: Optional[PromptOptions] = None
 ):
     jobs[job_id]["status"] = "running"
     job_logs[job_id] = []
@@ -362,13 +420,17 @@ async def run_full_pipeline(
     job_logs[job_id].append(f"\n[SYSTEM] --- PIPELINE STEP 3/4: TRANSLATING SUBTITLES ---\n")
     
     # Map source language to correct prompt path
-    prompt_file = "korean-thai-livestream.md"
-    if source_lang == "zh":
-        prompt_file = "chinese-thai-livestream.md"
-    elif source_lang == "ja":
-        prompt_file = "japanese-thai-livestream.md"
-        
-    prompt_path = BASE_DIR / "prompts" / prompt_file
+    if prompt_options:
+        prompt_path = generate_dynamic_prompt(source_lang, prompt_options, job_id)
+        job_logs[job_id].append(f"[SYSTEM] Using dynamically generated translation prompt.\n")
+    else:
+        prompt_file = "korean-thai-livestream.md"
+        if source_lang == "zh":
+            prompt_file = "chinese-thai-livestream.md"
+        elif source_lang == "ja":
+            prompt_file = "japanese-thai-livestream.md"
+            
+        prompt_path = BASE_DIR / "prompts" / prompt_file
     
     translate_cmd = [python_bin, "subtitle_pipeline.py", "translate", str(raw_srt_path), "--translation-prompt", str(prompt_path)]
     
@@ -403,7 +465,7 @@ async def run_full_pipeline(
         mkv_file = BASE_DIR / "video" / f"{video_id}.mkv"
         mux_cmd = [
             "ffmpeg", "-y", "-i", str(video_file), "-i", str(translated_srt_path),
-            "-map", "0", "-map", "1", "-c", "copy", str(mkv_file)
+            "-map", "0:v?", "-map", "0:a?", "-map", "1", "-c", "copy", str(mkv_file)
         ]
         jobs[job_id]["step"] = "Muxing"
         success = await run_step(job_id, mux_cmd)
@@ -657,12 +719,15 @@ async def start_translate(req: TranslateRequest, background_tasks: BackgroundTas
     # Map source_lang to prompt if req.prompt_path is not specified
     prompt_path = req.prompt_path
     if not prompt_path:
-        prompt_file = "korean-thai-livestream.md"
-        if req.source_lang == "zh":
-            prompt_file = "chinese-thai-livestream.md"
-        elif req.source_lang == "ja":
-            prompt_file = "japanese-thai-livestream.md"
-        prompt_path = str(BASE_DIR / "prompts" / prompt_file)
+        if req.prompt_options:
+            prompt_path = str(generate_dynamic_prompt(req.source_lang, req.prompt_options, job_id))
+        else:
+            prompt_file = "korean-thai-livestream.md"
+            if req.source_lang == "zh":
+                prompt_file = "chinese-thai-livestream.md"
+            elif req.source_lang == "ja":
+                prompt_file = "japanese-thai-livestream.md"
+            prompt_path = str(BASE_DIR / "prompts" / prompt_file)
         
     cmd = ["python3", "subtitle_pipeline.py", "translate", str(srt_file), "--translation-prompt", prompt_path]
     
@@ -706,10 +771,10 @@ async def start_integrate(req: IntegrateRequest, background_tasks: BackgroundTas
         # Mux soft sub to mkv
         out_name = video_file.stem + ".mkv"
         out_file = BASE_DIR / "video" / out_name
-        # ffmpeg -y -i video.mp4 -i sub.srt -map 0 -map 1 -c copy out.mkv
+        # ffmpeg -y -i video.mp4 -i sub.srt -map 0:v? -map 0:a? -map 1 -c copy out.mkv
         cmd = [
             "ffmpeg", "-y", "-i", str(video_file), "-i", str(srt_file),
-            "-map", "0", "-map", "1", "-c", "copy", str(out_file)
+            "-map", "0:v?", "-map", "0:a?", "-map", "1", "-c", "copy", str(out_file)
         ]
         label = f"Mux Subtitles to MKV: {video_file.name}"
     else:
@@ -760,7 +825,8 @@ async def start_full_pipeline(req: FullPipelineRequest, background_tasks: Backgr
         req.font_name,
         req.source_lang,
         req.video_path,
-        req.timing_mode
+        req.timing_mode,
+        req.prompt_options
     )
     
     return {"job_id": job_id, "label": jobs[job_id]["label"]}

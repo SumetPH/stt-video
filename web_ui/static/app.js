@@ -371,7 +371,13 @@ function initForms() {
                 font_name: document.getElementById('pipe-font').value || null,
                 source_lang: document.getElementById('pipe-source-lang').value || "ko",
                 timing_mode: document.getElementById('pipe-timing-mode').value || "auto",
-                video_path: null
+                video_path: null,
+                prompt_options: {
+                    topic: document.getElementById('pipe-prompt-topic').value,
+                    tone: document.getElementById('pipe-prompt-tone').value,
+                    speaker: document.getElementById('pipe-prompt-speaker').value,
+                    custom_rules: document.getElementById('pipe-prompt-custom').value
+                }
             };
         } else {
             body = {
@@ -379,7 +385,13 @@ function initForms() {
                 video_path: document.getElementById('pipe-local-video').value,
                 font_name: document.getElementById('pipe-font').value || null,
                 source_lang: document.getElementById('pipe-source-lang-local').value || "ko",
-                timing_mode: document.getElementById('pipe-timing-mode').value || "auto"
+                timing_mode: document.getElementById('pipe-timing-mode').value || "auto",
+                prompt_options: {
+                    topic: document.getElementById('pipe-prompt-topic-local').value,
+                    tone: document.getElementById('pipe-prompt-tone-local').value,
+                    speaker: document.getElementById('pipe-prompt-speaker-local').value,
+                    custom_rules: document.getElementById('pipe-prompt-custom-local').value
+                }
             };
         }
         
@@ -418,7 +430,13 @@ function initForms() {
         const body = {
             input_srt: document.getElementById('step3-srt').value,
             model: document.getElementById('step3-model').value || null,
-            source_lang: document.getElementById('step3-source-lang').value || "ko"
+            source_lang: document.getElementById('step3-source-lang').value || "ko",
+            prompt_options: {
+                topic: document.getElementById('step3-prompt-topic').value,
+                tone: document.getElementById('step3-prompt-tone').value,
+                speaker: document.getElementById('step3-prompt-speaker').value,
+                custom_rules: document.getElementById('step3-prompt-custom').value
+            }
         };
         await startJob('/api/translate', body);
     });
