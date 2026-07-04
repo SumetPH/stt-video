@@ -207,24 +207,32 @@ async function refreshFiles() {
         const data = await res.json();
         filesCache = data;
 
-        // Populate Step 2 dropdown (Videos to transcribe - can use downloaded videos or main videos)
+        // Populate step dropdowns with explicit source directories.
         const step2Select = document.getElementById('step2-video');
         const step4SelectV = document.getElementById('step4-video');
-        
-        const allVideos = [...data.video_downloads, ...data.videos];
-        
-        updateDropdown(step2Select, allVideos, 'rel_path', 'name', '-- เลือกไฟล์วิดีโอ --');
-        updateDropdown(step4SelectV, allVideos, 'rel_path', 'name', '-- เลือกไฟล์วิดีโอ --');
-        updateDropdown(document.getElementById('pipe-local-video'), allVideos, 'rel_path', 'name', '-- เลือกไฟล์วิดีโอ --');
+        const videoGroups = [
+            { label: 'video/download', items: data.video_downloads || [] },
+            { label: 'video', items: data.videos || [] }
+        ];
+        updateGroupedDropdown(step2Select, videoGroups, '-- เลือกไฟล์วิดีโอ --');
+        updateGroupedDropdown(step4SelectV, videoGroups, '-- เลือกไฟล์วิดีโอ --');
+        updateGroupedDropdown(document.getElementById('pipe-local-video'), videoGroups, '-- เลือกไฟล์วิดีโอ --');
 
-        // Populate Step 3 dropdown (SRT transcript files)
+        // Populate Step 3 dropdown (cleaned raw transcripts only)
         const step3Select = document.getElementById('step3-srt');
-        updateDropdown(step3Select, data.transcripts, 'rel_path', 'name', '-- เลือกไฟล์ SRT --');
+        updateGroupedDropdown(
+            step3Select,
+            [{ label: 'transcribe/*.raw.srt', items: data.transcripts || [] }],
+            '-- เลือกไฟล์ SRT สำหรับแปล --'
+        );
 
-        // Populate Step 4 Subtitle dropdown (srt translated files)
+        // Populate Step 4 subtitle dropdown (translated subtitles only)
         const step4SelectS = document.getElementById('step4-srt');
-        const allSrts = [...data.translations, ...data.transcripts]; // Allow raw srt too
-        updateDropdown(step4SelectS, allSrts, 'rel_path', 'name', '-- เลือกไฟล์ซับไตเติล --');
+        updateGroupedDropdown(
+            step4SelectS,
+            [{ label: 'translate/*.translated.srt', items: data.translations || [] }],
+            '-- เลือกไฟล์ซับไตเติลไทย --'
+        );
 
         // Update current file table view if in File Manager tab
         const activeSubTab = document.querySelector('.tab-sub-btn.active');
@@ -252,6 +260,52 @@ function updateDropdown(selectEl, items, valKey, labelKey, defaultLabel) {
     if (items.some(item => item[valKey] === currentVal)) {
         selectEl.value = currentVal;
     }
+}
+
+function updateGroupedDropdown(selectEl, groups, defaultLabel) {
+    if (!selectEl) return;
+    const currentVal = selectEl.value;
+    selectEl.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = defaultLabel;
+    selectEl.appendChild(defaultOption);
+
+    const allItems = [];
+    groups.forEach(group => {
+        const items = group.items || [];
+        if (items.length === 0) return;
+
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = `${group.label} (${items.length})`;
+        items.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.rel_path;
+            opt.textContent = item.rel_path;
+            opt.title = item.abs_path || item.rel_path;
+            optgroup.appendChild(opt);
+            allItems.push(item);
+        });
+        selectEl.appendChild(optgroup);
+    });
+
+    if (allItems.some(item => item.rel_path === currentVal)) {
+        selectEl.value = currentVal;
+    }
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function inlineString(value) {
+    return JSON.stringify(value).replace(/"/g, '&quot;');
 }
 
 // Format bytes to human readable format
@@ -283,7 +337,7 @@ function renderFileTable(subdir) {
         files = filesCache.translations || [];
     } else if (subdir === 'output_video') {
         // Output videos are MKV or MP4s that are processed (exist in root video folder)
-        files = filesCache.videos || [];
+        files = filesCache.output_videos || filesCache.videos || [];
     }
 
     if (files.length === 0) {
@@ -298,11 +352,11 @@ function renderFileTable(subdir) {
         // Actions mapping depending on file type
         let actionButtons = '';
         if (subdir === 'download') {
-            actionButtons = `<button class="btn btn-secondary btn-xs" onclick="sendToStep(2, '${file.rel_path}')">Transcribe</button>`;
+            actionButtons = `<button class="btn btn-secondary btn-xs" onclick="sendToStep(2, ${inlineString(file.rel_path)})">Transcribe</button>`;
         } else if (subdir === 'raw_srt') {
-            actionButtons = `<button class="btn btn-secondary btn-xs" onclick="sendToStep(3, '${file.rel_path}')">Translate</button>`;
+            actionButtons = `<button class="btn btn-secondary btn-xs" onclick="sendToStep(3, ${inlineString(file.rel_path)})">Translate</button>`;
         } else if (subdir === 'translated_srt') {
-            actionButtons = `<button class="btn btn-secondary btn-xs" onclick="sendToStep(4, '${file.rel_path}')">Embed/Mux</button>`;
+            actionButtons = `<button class="btn btn-secondary btn-xs" onclick="sendToStep(4, ${inlineString(file.rel_path)})">Embed/Mux</button>`;
         }
 
         // Always add download button
@@ -313,7 +367,10 @@ function renderFileTable(subdir) {
         `;
 
         tr.innerHTML = `
-            <td><strong>${file.name}</strong></td>
+            <td>
+                <strong>${escapeHtml(file.name)}</strong>
+                <span class="file-path">${escapeHtml(file.directory || file.rel_path)}</span>
+            </td>
             <td>${formatBytes(file.size_bytes)}</td>
             <td>${formatTime(file.modified)}</td>
             <td class="text-right">

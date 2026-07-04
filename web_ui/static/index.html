@@ -337,7 +337,10 @@
                     <div class="form-group">
                       <label for="pipe-timing-mode">โหมดจับเวลาซับ</label>
                       <select id="pipe-timing-mode">
-                        <option value="auto" selected>
+                        <option value="word_cpu_fast" selected>
+                          แม่นยำสมดุล (CPU + word timestamp + chunk สั้น)
+                        </option>
+                        <option value="auto">
                           เร็วอัตโนมัติ (ใช้ MPS ถ้ามี)
                         </option>
                         <option value="word_cpu">
@@ -441,6 +444,7 @@
                     <select id="step2-video" class="file-select" required>
                       <option value="">-- เลือกไฟล์จากเครื่อง --</option>
                     </select>
+                    <span class="field-hint">สแกนจาก video/download และ video</span>
                   </div>
                   <div class="form-row grid-2">
                     <div class="form-group">
@@ -474,7 +478,10 @@
                   <div class="form-group">
                     <label for="step2-timing-mode">โหมดจับเวลาซับ</label>
                     <select id="step2-timing-mode">
-                      <option value="auto" selected>
+                      <option value="word_cpu_fast" selected>
+                        แม่นยำสมดุล (CPU + word timestamp + chunk สั้น)
+                      </option>
+                      <option value="auto">
                         เร็วอัตโนมัติ (ใช้ MPS ถ้ามี)
                       </option>
                       <option value="word_cpu">
@@ -504,6 +511,7 @@
                     <select id="step3-srt" class="file-select" required>
                       <option value="">-- เลือกไฟล์ SRT --</option>
                     </select>
+                    <span class="field-hint">สแกนเฉพาะ transcribe/*.raw.srt</span>
                   </div>
                   <div class="form-group">
                     <label for="step3-source-lang"
@@ -582,12 +590,14 @@
                     <select id="step4-video" class="file-select" required>
                       <option value="">-- เลือกไฟล์วิดีโอ --</option>
                     </select>
+                    <span class="field-hint">สแกนจาก video/download และ video</span>
                   </div>
                   <div class="form-group">
                     <label>เลือกไฟล์ซับไตเติล (ไทย)</label>
                     <select id="step4-srt" class="file-select" required>
                       <option value="">-- เลือกไฟล์ซับไตเติล --</option>
                     </select>
+                    <span class="field-hint">สแกนเฉพาะ translate/*.translated.srt</span>
                   </div>
                   <div class="form-row grid-2">
                     <div class="form-group">

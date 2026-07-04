@@ -6,7 +6,7 @@ import uuid
 import urllib.parse
 import signal
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +30,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Ensure directories exist
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(BASE_DIR / "video" / "download", exist_ok=True)
+os.makedirs(BASE_DIR / "video" / "burn", exist_ok=True)
 os.makedirs(BASE_DIR / "transcribe", exist_ok=True)
 os.makedirs(BASE_DIR / "translate", exist_ok=True)
 
@@ -137,7 +138,7 @@ def generate_dynamic_prompt(source_lang: str, options: PromptOptions, job_id: st
 
 def build_whisper_env(source_lang: Optional[str], timing_mode: Optional[str] = "auto") -> dict:
     env_vars = {"WHISPER_LANGUAGE": source_lang or "ko"}
-    if timing_mode == "word_cpu":
+    if timing_mode in {"word_cpu", "word_cpu_fast"}:
         env_vars.update(
             {
                 "WHISPER_DEVICE": "cpu",
@@ -145,9 +146,40 @@ def build_whisper_env(source_lang: Optional[str], timing_mode: Optional[str] = "
                 "WHISPER_SNAP_START_TO_FIRST_WORD": "true",
             }
         )
+    if timing_mode == "word_cpu_fast":
+        env_vars.update(
+            {
+                "WHISPER_TEMPERATURES": "0,0.2,0.4,0.6",
+                "WHISPER_NO_SPEECH_THRESHOLD": "0.8",
+                "WHISPER_HALLUCINATION_SILENCE_THRESHOLD": "2.0",
+                "WHISPER_CHUNK_SECONDS": "300",
+                "WHISPER_CHUNK_OVERLAP_SECONDS": "1",
+                "WHISPER_CPU_THREADS": "8",
+            }
+        )
     return env_vars
 
-async def run_job_process(job_id: str, cmd: List[str], label: str, output_check_paths: List[Path] = None, env_vars: Optional[dict] = None):
+
+def cleanup_generated_files(job_id: str, paths: Optional[List[Path]]) -> None:
+    if not paths:
+        return
+    for path in paths:
+        try:
+            if path.exists():
+                path.unlink()
+                job_logs[job_id].append(f"[SYSTEM] Removed temporary file: {path.relative_to(BASE_DIR)}\n")
+        except Exception as exc:
+            job_logs[job_id].append(f"[WARNING] Failed to remove temporary file {path}: {exc}\n")
+
+
+async def run_job_process(
+    job_id: str,
+    cmd: List[str],
+    label: str,
+    output_check_paths: List[Path] = None,
+    env_vars: Optional[dict] = None,
+    cleanup_paths: Optional[List[Path]] = None
+):
     jobs[job_id]["status"] = "running"
     job_logs[job_id] = []
     
@@ -233,6 +265,7 @@ async def run_job_process(job_id: str, cmd: List[str], label: str, output_check_
         jobs[job_id]["status"] = "failed"
         job_logs[job_id].append(f"\n[SYSTEM] Exception during execution: {str(e)}\n")
     finally:
+        cleanup_generated_files(job_id, cleanup_paths)
         if job_id in job_processes:
             del job_processes[job_id]
 
@@ -418,10 +451,12 @@ async def run_full_pipeline(
 
     # 3. Translate SRT
     job_logs[job_id].append(f"\n[SYSTEM] --- PIPELINE STEP 3/4: TRANSLATING SUBTITLES ---\n")
+    generated_prompt_path = None
     
     # Map source language to correct prompt path
     if prompt_options:
         prompt_path = generate_dynamic_prompt(source_lang, prompt_options, job_id)
+        generated_prompt_path = prompt_path
         job_logs[job_id].append(f"[SYSTEM] Using dynamically generated translation prompt.\n")
     else:
         prompt_file = "korean-thai-livestream.md"
@@ -435,7 +470,10 @@ async def run_full_pipeline(
     translate_cmd = [python_bin, "subtitle_pipeline.py", "translate", str(raw_srt_path), "--translation-prompt", str(prompt_path)]
     
     jobs[job_id]["step"] = "Translating"
-    success = await run_step(job_id, translate_cmd)
+    try:
+        success = await run_step(job_id, translate_cmd)
+    finally:
+        cleanup_generated_files(job_id, [generated_prompt_path] if generated_prompt_path else None)
     if not success:
         return
 
@@ -564,7 +602,13 @@ def get_status():
 
 @app.get("/api/files")
 def get_files():
-    def list_files_in_dir(directory: Path, allowed_extensions: List[str]) -> List[dict]:
+    def list_files_in_dir(
+        directory: Path,
+        allowed_extensions: List[str],
+        *,
+        kind: str,
+        include: Optional[Callable[[Path], bool]] = None
+    ) -> List[dict]:
         if not directory.exists():
             return []
         files = []
@@ -573,10 +617,15 @@ def get_files():
                 # Exclude hidden files or cache directories
                 if "/." in file_path.as_posix() or "\\." in file_path.as_posix():
                     continue
+                if include and not include(file_path):
+                    continue
+                relative_path = file_path.relative_to(BASE_DIR)
                 files.append({
                     "name": file_path.name,
-                    "rel_path": str(file_path.relative_to(BASE_DIR)),
+                    "rel_path": str(relative_path),
                     "abs_path": str(file_path),
+                    "directory": str(relative_path.parent),
+                    "kind": kind,
                     "size_bytes": file_path.stat().st_size,
                     "modified": file_path.stat().st_mtime
                 })
@@ -584,18 +633,41 @@ def get_files():
         files.sort(key=lambda x: x["modified"], reverse=True)
         return files
 
-    video_downloads = list_files_in_dir(BASE_DIR / "video" / "download", [".mp4", ".mkv"])
-    videos = list_files_in_dir(BASE_DIR / "video", [".mp4", ".mkv"])
+    video_downloads = list_files_in_dir(
+        BASE_DIR / "video" / "download",
+        [".mp4", ".mkv"],
+        kind="downloaded_video",
+    )
+    videos = list_files_in_dir(BASE_DIR / "video", [".mp4", ".mkv"], kind="video")
     # Filter downloads out of main videos list to avoid duplicates
     videos = [v for v in videos if "download/" not in v["rel_path"]]
-    
-    transcripts = list_files_in_dir(BASE_DIR / "transcribe", [".srt"])
-    translations = list_files_in_dir(BASE_DIR / "translate", [".srt"])
+    output_videos = [v for v in videos if v["rel_path"].endswith((".mkv", ".subtitled.mp4"))]
+
+    transcripts = list_files_in_dir(
+        BASE_DIR / "transcribe",
+        [".srt"],
+        kind="raw_transcript",
+        include=lambda path: path.name.endswith(".raw.srt"),
+    )
+    whisper_transcripts = list_files_in_dir(
+        BASE_DIR / "transcribe",
+        [".srt"],
+        kind="whisper_transcript",
+        include=lambda path: path.name.endswith(".raw_whisper.srt"),
+    )
+    translations = list_files_in_dir(
+        BASE_DIR / "translate",
+        [".srt"],
+        kind="translated_subtitle",
+        include=lambda path: path.name.endswith(".translated.srt"),
+    )
 
     return {
         "video_downloads": video_downloads,
         "videos": videos,
+        "output_videos": output_videos,
         "transcripts": transcripts,
+        "whisper_transcripts": whisper_transcripts,
         "translations": translations
     }
 
@@ -718,9 +790,12 @@ async def start_translate(req: TranslateRequest, background_tasks: BackgroundTas
         
     # Map source_lang to prompt if req.prompt_path is not specified
     prompt_path = req.prompt_path
+    cleanup_paths = None
     if not prompt_path:
         if req.prompt_options:
-            prompt_path = str(generate_dynamic_prompt(req.source_lang, req.prompt_options, job_id))
+            generated_prompt_path = generate_dynamic_prompt(req.source_lang, req.prompt_options, job_id)
+            prompt_path = str(generated_prompt_path)
+            cleanup_paths = [generated_prompt_path]
         else:
             prompt_file = "korean-thai-livestream.md"
             if req.source_lang == "zh":
@@ -748,7 +823,8 @@ async def start_translate(req: TranslateRequest, background_tasks: BackgroundTas
         job_id, 
         cmd, 
         jobs[job_id]["label"], 
-        [expected_translated]
+        [expected_translated],
+        cleanup_paths=cleanup_paths
     )
     
     return {"job_id": job_id, "label": jobs[job_id]["label"]}
@@ -780,7 +856,15 @@ async def start_integrate(req: IntegrateRequest, background_tasks: BackgroundTas
     else:
         # Burn hard sub to mp4
         out_file = BASE_DIR / "video" / "burn" / (video_file.stem + ".subtitled.mp4")
-        cmd = ["python3", "subtitle_pipeline.py", "burn", str(video_file), str(srt_file)]
+        cmd = [
+            "python3",
+            "subtitle_pipeline.py",
+            "burn",
+            str(video_file),
+            str(srt_file),
+            "--output-dir",
+            str(BASE_DIR / "video"),
+        ]
         if req.font_name:
             cmd.extend(["--font-name", req.font_name])
         label = f"Burn Subtitles to MP4: {video_file.name}"

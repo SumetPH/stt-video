@@ -577,6 +577,19 @@ def get_env_float(name: str, default: float, *, minimum: float | None = None) ->
     return value
 
 
+def get_optional_env_int(name: str, *, minimum: int | None = None) -> int | None:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return None
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise PipelineError(f"{name} must be an integer.") from exc
+    if minimum is not None and value < minimum:
+        raise PipelineError(f"{name} must be greater than or equal to {minimum}.")
+    return value
+
+
 def get_env_bool(name: str, default: bool) -> bool:
     raw_value = os.getenv(name, "").strip().lower()
     if not raw_value:
@@ -720,10 +733,21 @@ def load_whisper_model() -> tuple[object, bool, str]:
     import whisper  # type: ignore
 
     device, use_fp16 = choose_whisper_device()
+    if device == "cpu":
+        import torch  # type: ignore
+
+        cpu_threads = get_optional_env_int("WHISPER_CPU_THREADS", minimum=1)
+        if cpu_threads is not None:
+            torch.set_num_threads(cpu_threads)
+
     model_name = get_whisper_model_name()
     precision_label = "fp16" if use_fp16 else "fp32"
+    word_timestamp_label = "on" if get_whisper_word_timestamps(device) else "off"
     print(f"Using Whisper model: {model_name}", file=sys.stderr)
     print(f"Using Whisper device: {device} ({precision_label})", file=sys.stderr)
+    if device == "cpu":
+        print(f"Using Whisper CPU threads: {torch.get_num_threads()}", file=sys.stderr)
+    print(f"Using Whisper word timestamps: {word_timestamp_label}", file=sys.stderr)
     return whisper.load_model(model_name, device=device), use_fp16, device
 
 
@@ -832,13 +856,13 @@ def transcribe_audio_in_chunks(
     clip_duration_seconds = get_wav_duration_seconds(audio_path)
     chunk_seconds = get_transcribe_chunk_seconds()
     if clip_duration_seconds <= chunk_seconds:
-        print_step("Step 2/2: Transcribing Korean audio with Whisper large-v3...")
+        print_step("Step 2/2: Transcribing audio with Whisper...")
         return transcribe_audio(audio_path, timestamp_offset_seconds=timestamp_offset_seconds)
 
     overlap_seconds = min(get_transcribe_overlap_seconds(), chunk_seconds / 4)
     total_chunks = math.ceil(clip_duration_seconds / chunk_seconds)
     print_step(
-        f"Step 2/2: Transcribing Korean audio with Whisper large-v3 in {total_chunks} chunks..."
+        f"Step 2/2: Transcribing audio with Whisper in {total_chunks} chunks..."
     )
 
     model, use_fp16, device = load_whisper_model()
