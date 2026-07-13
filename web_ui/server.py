@@ -86,6 +86,87 @@ class FullPipelineRequest(BaseModel):
     timing_mode: Optional[str] = "auto"
     prompt_options: Optional[PromptOptions] = None
 
+
+def is_youtube_url(url: str) -> bool:
+    host = urllib.parse.urlparse(url).hostname
+    if not host:
+        return False
+    host = host.lower()
+    return host == "youtu.be" or host.endswith(".youtu.be") or host == "youtube.com" or host.endswith(".youtube.com")
+
+
+def youtube_format_selector(quality: str) -> str:
+    if quality == "best":
+        return "bv+ba/b"
+    if quality == "worst":
+        return "wv*+wa/w"
+    if quality.endswith("p") and quality[:-1].isdigit():
+        return f"bv[height<={quality[:-1]}]+ba/b[height<={quality[:-1]}]"
+    return "bv+ba/b"
+
+
+def youtube_download_section(start_offset: str, duration: Optional[str]) -> Optional[str]:
+    if not duration:
+        return None
+
+    def seconds(value: str) -> float:
+        hours, minutes, seconds_value = value.split(":")
+        total = int(hours) * 3600 + int(minutes) * 60 + float(seconds_value)
+        if total < 0:
+            raise ValueError("Time values must not be negative")
+        return total
+
+    def timestamp(value: float) -> str:
+        hours, remainder = divmod(value, 3600)
+        minutes, seconds_value = divmod(remainder, 60)
+        return f"{int(hours):02}:{int(minutes):02}:{seconds_value:06.3f}".rstrip("0").rstrip(".")
+
+    return f"*{start_offset}-{timestamp(seconds(start_offset) + seconds(duration))}"
+
+
+def build_download_command(
+    url: str,
+    quality: str,
+    threads: int,
+    start_offset: str,
+    duration: Optional[str],
+    output_file: Path,
+) -> tuple[List[str], str]:
+    if is_youtube_url(url):
+        command = [
+            sys.executable,
+            "-m",
+            "yt_dlp",
+            "--no-playlist",
+            "--format",
+            youtube_format_selector(quality),
+            "--merge-output-format",
+            "mp4",
+            "--remux-video",
+            "mp4",
+            "--concurrent-fragments",
+            str(threads),
+            "--newline",
+            "--output",
+            str(output_file),
+        ]
+        section = youtube_download_section(start_offset, duration)
+        if section:
+            command.extend(["--download-sections", section])
+        command.append(url)
+        return command, "yt-dlp"
+
+    command = [
+        "streamlink", url, quality,
+        "--stream-segment-threads", str(threads),
+        "--hls-start-offset", start_offset,
+        "--progress", "force",
+        "-o", str(output_file),
+    ]
+    if duration:
+        command.extend(["--stream-segmented-duration", duration])
+    return command, "Streamlink"
+
 def generate_dynamic_prompt(source_lang: str, options: PromptOptions, job_id: str) -> Path:
     lang_map = {
         "ko": "Korean",
@@ -287,16 +368,10 @@ async def run_download_and_remux_job(
     
     try:
         # 1. Download
-        job_logs[job_id].append(f"[SYSTEM] Step 1/2: Downloading video via Streamlink...\n")
-        dl_cmd = [
-            "streamlink", url, quality,
-            "--stream-segment-threads", str(threads),
-            "--hls-start-offset", start_offset,
-            "--progress", "force",
-            "-o", str(temp_file)
-        ]
-        if duration:
-            dl_cmd.extend(["--stream-segmented-duration", duration])
+        dl_cmd, downloader = build_download_command(
+            url, quality, threads, start_offset, duration, temp_file
+        )
+        job_logs[job_id].append(f"[SYSTEM] Step 1/2: Downloading video via {downloader}...\n")
         jobs[job_id]["step"] = "Downloading"
         success = await run_step(job_id, dl_cmd)
         if not success:
@@ -372,15 +447,10 @@ async def run_full_pipeline(
     try:
         if url:
             job_logs[job_id].append(f"[SYSTEM] --- PIPELINE STEP 1/4: DOWNLOADING VIDEO ({video_id}.mp4) ---\n")
-            dl_cmd = [
-                "streamlink", url, quality,
-                "--stream-segment-threads", str(threads),
-                "--hls-start-offset", start_offset,
-                "--progress", "force",
-                "-o", str(temp_video_file)
-            ]
-            if duration:
-                dl_cmd.extend(["--stream-segmented-duration", duration])
+            dl_cmd, downloader = build_download_command(
+                url, quality, threads, start_offset, duration, temp_video_file
+            )
+            job_logs[job_id].append(f"[SYSTEM] Downloader: {downloader}\n")
             
             jobs[job_id]["step"] = "Downloading"
             success = await run_step(job_id, dl_cmd)

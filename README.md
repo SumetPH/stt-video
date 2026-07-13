@@ -16,6 +16,7 @@
 - แปลซับผ่าน API ที่ compatible กับ OpenAI เช่น OpenAI-compatible gateway หรือ LM Studio
 - ทำความสะอาด transcript เบื้องต้น เช่น ลบ filler และลดบรรทัดซ้ำยาวผิดปกติ
 - รองรับตัดเฉพาะช่วงของวิดีโอด้วย `--start-time` และ `--duration`
+- ดาวน์โหลด YouTube ผ่าน `yt-dlp` เพื่อเลือกวิดีโอและเสียงคุณภาพสูงสุด แล้วรวมเป็น MP4
 - เลือกฟอนต์ซับได้ผ่าน `--font-name` หรือ `SUBTITLE_FONT`
 
 ## Requirements
