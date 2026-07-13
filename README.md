@@ -17,6 +17,7 @@
 - ทำความสะอาด transcript เบื้องต้น เช่น ลบ filler และลดบรรทัดซ้ำยาวผิดปกติ
 - รองรับตัดเฉพาะช่วงของวิดีโอด้วย `--start-time` และ `--duration`
 - ดาวน์โหลด YouTube ผ่าน `yt-dlp` เพื่อเลือกวิดีโอและเสียงคุณภาพสูงสุด แล้วรวมเป็น MP4
+- ดาวน์โหลด CHZZK VOD/clip/live ผ่าน Streamlink และรองรับ adult-only video ด้วย NAVER session cookie
 - เลือกฟอนต์ซับได้ผ่าน `--font-name` หรือ `SUBTITLE_FONT`
 
 ## Requirements
@@ -64,6 +65,15 @@ LLM_BASE_URL="http://localhost:1234"
 LLM_MODEL="gemini-2.0-flash"
 LLM_API_KEY=""
 ```
+
+ถ้าต้องการดาวน์โหลด CHZZK adult-only video ให้ใช้บัญชี NAVER/CHZZK ที่ยืนยันสิทธิ์แล้ว และเพิ่มทั้งสองค่าใน `.env` (ห้ามส่งค่าเหล่านี้ผ่านหน้าเว็บ):
+
+```env
+CHZZK_NID_AUT="..."
+CHZZK_NID_SES="..."
+```
+
+ระบบจะส่ง cookie นี้ให้ Streamlink เฉพาะ URL `chzzk.naver.com` และจะไม่แสดงค่าใน job log หรือ API สถานะ
 
 ตัวแปรเสริมที่สคริปต์รองรับ:
 

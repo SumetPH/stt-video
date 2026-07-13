@@ -27,6 +27,24 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
+
+def load_env_file(path: Path) -> None:
+    """Load local configuration without overwriting explicitly exported values."""
+    if not path.exists():
+        return
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if key:
+            os.environ.setdefault(key, value.strip().strip("'\""))
+
+
+load_env_file(BASE_DIR / ".env")
+
 # Ensure directories exist
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(BASE_DIR / "video" / "download", exist_ok=True)
@@ -95,6 +113,71 @@ def is_youtube_url(url: str) -> bool:
     return host == "youtu.be" or host.endswith(".youtu.be") or host == "youtube.com" or host.endswith(".youtube.com")
 
 
+def is_chzzk_url(url: str) -> bool:
+    host = urllib.parse.urlparse(url).hostname
+    if not host:
+        return False
+    return host.lower() in {"chzzk.naver.com", "www.chzzk.naver.com"}
+
+
+def chzzk_cookie_arguments(url: str) -> List[str]:
+    if not is_chzzk_url(url):
+        return []
+
+    nid_aut = os.getenv("CHZZK_NID_AUT")
+    nid_ses = os.getenv("CHZZK_NID_SES")
+    if bool(nid_aut) != bool(nid_ses):
+        raise ValueError(
+            "CHZZK_NID_AUT and CHZZK_NID_SES must be set together in .env"
+        )
+    if not nid_aut:
+        return []
+
+    return [
+        "--http-cookie", f"NID_AUT={nid_aut}",
+        "--http-cookie", f"NID_SES={nid_ses}",
+    ]
+
+
+def safe_download_name(value: str) -> str:
+    cleaned = "".join(
+        "_" if char in '<>:"/\\|?*\0' else char for char in value
+    )
+    cleaned = " ".join(cleaned.split()).strip(" .")
+    return cleaned[:160]
+
+
+def redacted_command(cmd: List[str]) -> str:
+    sensitive_flags = {"--http-cookie", "--http-header", "--http-cookies-file"}
+    redacted: List[str] = []
+    redact_next = False
+    for part in cmd:
+        if redact_next:
+            redacted.append("<redacted>")
+            redact_next = False
+        else:
+            redacted.append(part)
+            redact_next = part in sensitive_flags
+    return " ".join(redacted)
+
+
+def status_environment() -> Dict[str, str]:
+    visible_keys = {
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "SUBTITLE_FONT",
+        "WHISPER_DEVICE",
+        "WHISPER_MODEL",
+        "WHISPER_TEMPERATURES",
+        "WHISPER_WORD_TIMESTAMPS",
+    }
+    return {
+        key: os.environ[key]
+        for key in visible_keys
+        if os.getenv(key) is not None
+    }
+
+
 def youtube_format_selector(quality: str) -> str:
     if quality == "best":
         return "bv+ba/b"
@@ -161,6 +244,7 @@ def build_download_command(
         "--stream-segment-threads", str(threads),
         "--hls-start-offset", start_offset,
         "--progress", "force",
+        *chzzk_cookie_arguments(url),
         "-o", str(output_file),
     ]
     if duration:
@@ -435,7 +519,7 @@ async def run_full_pipeline(
         python_bin = sys.executable
 
     # Filename prefix based on URL or timestamp if empty
-    video_id = output_name or "video_" + str(uuid.uuid4())[:8]
+    video_id = safe_download_name(output_name or "") or "video_" + str(uuid.uuid4())[:8]
     
     if url:
         # 1. Download Video & Lossless Remux
@@ -586,7 +670,7 @@ async def run_full_pipeline(
         jobs[job_id]["status"] = "failed"
 
 async def run_step(job_id: str, cmd: List[str], env_vars: Optional[dict] = None) -> bool:
-    job_logs[job_id].append(f"[SYSTEM] Command: {' '.join(cmd)}\n")
+    job_logs[job_id].append(f"[SYSTEM] Command: {redacted_command(cmd)}\n")
     
     run_env = os.environ.copy()
     if env_vars:
@@ -652,20 +736,13 @@ def get_status():
     ffmpeg_ok = os.system("which ffmpeg > /dev/null") == 0
     streamlink_ok = os.system("which streamlink > /dev/null") == 0
     
-    # Read .env for current settings
-    env_vars = {}
-    env_path = BASE_DIR / ".env"
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if "=" in line and not line.strip().startswith("#"):
-                    k, v = line.strip().split("=", 1)
-                    env_vars[k.strip()] = v.strip().strip('"').strip("'")
-                    
     return {
         "ffmpeg": ffmpeg_ok,
         "streamlink": streamlink_ok,
-        "environment": env_vars,
+        "environment": status_environment(),
+        "chzzk_auth_configured": bool(
+            os.getenv("CHZZK_NID_AUT") and os.getenv("CHZZK_NID_SES")
+        ),
         "system_python": sys.executable,
         "venv_exists": os.path.exists(BASE_DIR / ".venv")
     }
@@ -774,7 +851,7 @@ async def start_download(req: DownloadRequest, background_tasks: BackgroundTasks
     
     # Resolve output name
     if req.output_name:
-        video_id = req.output_name
+        video_id = safe_download_name(req.output_name)
     else:
         # Extract video ID from Naver URL
         # e.g., https://chzzk.naver.com/video/13469305
