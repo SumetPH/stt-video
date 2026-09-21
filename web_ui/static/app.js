@@ -4,6 +4,7 @@ let currentJobId = null;
 let logEventSource = null;
 let filesCache = {};
 let pipelineInputMode = 'url';
+const MAX_TERMINAL_LINES = 1000;
 
 function switchInputMode(mode) {
     pipelineInputMode = mode;
@@ -708,6 +709,10 @@ function appendLog(text, type = 'output', isCarriageReturn = false) {
     line.textContent = text;
     
     consoleEl.appendChild(line);
+
+    while (consoleEl.childElementCount > MAX_TERMINAL_LINES) {
+        consoleEl.firstElementChild.remove();
+    }
     
     // Auto scroll to bottom
     consoleEl.scrollTop = consoleEl.scrollHeight;

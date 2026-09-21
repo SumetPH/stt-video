@@ -7,7 +7,7 @@ import urllib.parse
 import signal
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -1089,12 +1089,17 @@ async def cancel_job(job_id: str):
     return {"status": "cancelled", "job_id": job_id}
 
 @app.get("/api/jobs/{job_id}/logs")
-async def get_job_logs_stream(job_id: str):
+async def get_job_logs_stream(job_id: str, request: Request):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-        
+
+    try:
+        resume_index = max(0, int(request.headers.get("last-event-id", "0")))
+    except ValueError:
+        resume_index = 0
+
     async def log_generator():
-        last_idx = 0
+        last_idx = min(resume_index, len(job_logs.get(job_id, [])))
         while True:
             # Yield new lines
             current_len = len(job_logs.get(job_id, []))
@@ -1103,7 +1108,7 @@ async def get_job_logs_stream(job_id: str):
                     line = job_logs[job_id][i]
                     # Escape newlines and carriage returns for SSE format
                     escaped_line = line.replace('\n', '\\n').replace('\r', '\\r')
-                    yield f"data: {escaped_line}\n\n"
+                    yield f"id: {i + 1}\ndata: {escaped_line}\n\n"
                 last_idx = current_len
                 
             # If job finished, signal end

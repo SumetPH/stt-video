@@ -727,7 +727,7 @@ def block_belongs_to_chunk(block: SRTBlock, *, owned_start: float, owned_end: fl
     return owned_start <= midpoint < owned_end
 
 
-def load_whisper_model() -> tuple[object, bool, str]:
+def load_whisper_model() -> tuple[object, bool, bool]:
     require_module("whisper", "openai-whisper")
     import whisper  # type: ignore
 
@@ -741,13 +741,14 @@ def load_whisper_model() -> tuple[object, bool, str]:
 
     model_name = get_whisper_model_name()
     precision_label = "fp16" if use_fp16 else "fp32"
-    word_timestamp_label = "on" if get_whisper_word_timestamps(device) else "off"
+    word_timestamps = get_whisper_word_timestamps(device)
+    word_timestamp_label = "on" if word_timestamps else "off"
     print(f"Using Whisper model: {model_name}", file=sys.stderr)
     print(f"Using Whisper device: {device} ({precision_label})", file=sys.stderr)
     if device == "cpu":
         print(f"Using Whisper CPU threads: {torch.get_num_threads()}", file=sys.stderr)
     print(f"Using Whisper word timestamps: {word_timestamp_label}", file=sys.stderr)
-    return whisper.load_model(model_name, device=device), use_fp16, device
+    return whisper.load_model(model_name, device=device), use_fp16, word_timestamps
 
 
 def first_word_start_seconds(segment: object) -> float | None:
@@ -787,7 +788,7 @@ def transcribe_audio_with_model(
     *,
     timestamp_offset_seconds: float = 0.0,
     use_fp16: bool,
-    device: str,
+    word_timestamps: bool,
 ) -> list[SRTBlock]:
     result = model.transcribe(
         str(audio_path),
@@ -798,7 +799,7 @@ def transcribe_audio_with_model(
         no_speech_threshold=get_env_float("WHISPER_NO_SPEECH_THRESHOLD", 0.6, minimum=0.0),
         compression_ratio_threshold=get_env_float("WHISPER_COMPRESSION_RATIO_THRESHOLD", 1.8, minimum=0.0),
         logprob_threshold=get_env_float("WHISPER_LOGPROB_THRESHOLD", -1.0),
-        word_timestamps=get_whisper_word_timestamps(device),
+        word_timestamps=word_timestamps,
         hallucination_silence_threshold=get_env_float(
             "WHISPER_HALLUCINATION_SILENCE_THRESHOLD",
             1.0,
@@ -836,13 +837,13 @@ def transcribe_audio_with_model(
 
 
 def transcribe_audio(audio_path: Path, *, timestamp_offset_seconds: float = 0.0) -> list[SRTBlock]:
-    model, use_fp16, device = load_whisper_model()
+    model, use_fp16, word_timestamps = load_whisper_model()
     return transcribe_audio_with_model(
         model,
         audio_path,
         timestamp_offset_seconds=timestamp_offset_seconds,
         use_fp16=use_fp16,
-        device=device,
+        word_timestamps=word_timestamps,
     )
 
 
@@ -864,7 +865,7 @@ def transcribe_audio_in_chunks(
         f"Step 2/2: Transcribing audio with Whisper in {total_chunks} chunks..."
     )
 
-    model, use_fp16, device = load_whisper_model()
+    model, use_fp16, word_timestamps = load_whisper_model()
     combined_blocks: list[SRTBlock] = []
 
     for chunk_index in range(total_chunks):
@@ -890,7 +891,7 @@ def transcribe_audio_in_chunks(
             chunk_audio_path,
             timestamp_offset_seconds=timestamp_offset_seconds + extract_start_seconds,
             use_fp16=use_fp16,
-            device=device,
+            word_timestamps=word_timestamps,
         )
 
         owned_start_seconds = timestamp_offset_seconds + chunk_start_seconds
