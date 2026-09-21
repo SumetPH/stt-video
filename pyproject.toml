@@ -1,0 +1,16 @@
+[project]
+name = "stt-video"
+version = "0.1.0"
+description = "Korean-to-Thai subtitle video pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "openai>=1.75.0",
+    "openai-whisper",
+    "python-multipart>=0.0.6",
+    "uvicorn>=0.22.0",
+    "yt-dlp",
+]
+
+[tool.uv]
+package = false

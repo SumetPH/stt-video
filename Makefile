@@ -1,14 +1,13 @@
-PYTHON := python3
-VENV_DIR := .venv
-VENV_PYTHON := $(VENV_DIR)/bin/python
-VENV_PIP := $(VENV_DIR)/bin/pip
+UV := uv
+UV_RUN := $(UV) run
 
-.PHONY: help venv install transcribe translate burn all clean ui
+.PHONY: help venv install test transcribe translate burn all clean ui
 
 help:
 	@printf "Targets:\n"
-	@printf "  make venv                         Create .venv\n"
-	@printf "  make install                      Install Python dependencies into .venv\n"
+	@printf "  make venv                         Create .venv with uv\n"
+	@printf "  make install                      Sync Python dependencies with uv\n"
+	@printf "  make test                         Run tests\n"
 	@printf "  make ui                           Start Web UI (FastAPI) and open in browser\n"
 	@printf "  make transcribe VIDEO=video.mp4   Create audio.wav and raw.srt\n"
 	@printf "  make translate SRT=raw.srt        Create translated.srt\n"
@@ -24,15 +23,17 @@ help:
 	@printf "  LLM_MODEL=gemini-2.0-flash\n"
 
 venv:
-	$(PYTHON) -m venv $(VENV_DIR)
+	$(UV) venv
 
-install: venv
-	$(VENV_PIP) install --upgrade pip
-	$(VENV_PIP) install -r requirements.txt
+install:
+	$(UV) sync
+
+test:
+	$(UV_RUN) python -m unittest discover -s tests
 
 transcribe:
 	@test -n "$(VIDEO)" || (echo "Usage: make transcribe VIDEO=/path/to/video.mp4 [OUT=./out]" >&2; exit 1)
-	$(VENV_PYTHON) subtitle_pipeline.py transcribe "$(VIDEO)" $(if $(OUT),--output-dir "$(OUT)",) $(if $(START),--start-time "$(START)",) $(if $(DURATION),--duration "$(DURATION)",)
+	$(UV_RUN) python subtitle_pipeline.py transcribe "$(VIDEO)" $(if $(OUT),--output-dir "$(OUT)",) $(if $(START),--start-time "$(START)",) $(if $(DURATION),--duration "$(DURATION)",)
 
 translate:
 	@test -n "$(SRT)" || (echo "Usage: make translate SRT=/path/to/raw.srt [OUT=./out]" >&2; exit 1)
@@ -40,12 +41,12 @@ translate:
 	@test -n "$(LLM_API_KEY)" || (echo "Missing LLM_API_KEY" >&2; exit 1)
 	@test -n "$(LLM_MODEL)" || (echo "Missing LLM_MODEL" >&2; exit 1)
 	LLM_BASE_URL="$(LLM_BASE_URL)" LLM_API_KEY="$(LLM_API_KEY)" LLM_MODEL="$(LLM_MODEL)" \
-	$(VENV_PYTHON) subtitle_pipeline.py translate "$(SRT)" $(if $(OUT),--output-dir "$(OUT)",)
+	$(UV_RUN) python subtitle_pipeline.py translate "$(SRT)" $(if $(OUT),--output-dir "$(OUT)",)
 
 burn:
 	@test -n "$(VIDEO)" || (echo "Usage: make burn VIDEO=/path/to/video.mp4 SRT=/path/to/translated.srt [OUT=./out] [FONT=Sarabun]" >&2; exit 1)
 	@test -n "$(SRT)" || (echo "Usage: make burn VIDEO=/path/to/video.mp4 SRT=/path/to/translated.srt [OUT=./out] [FONT=Sarabun]" >&2; exit 1)
-	$(VENV_PYTHON) subtitle_pipeline.py burn "$(VIDEO)" "$(SRT)" $(if $(OUT),--output-dir "$(OUT)",) $(if $(FONT),--font-name "$(FONT)",)
+	$(UV_RUN) python subtitle_pipeline.py burn "$(VIDEO)" "$(SRT)" $(if $(OUT),--output-dir "$(OUT)",) $(if $(FONT),--font-name "$(FONT)",)
 
 all:
 	@test -n "$(VIDEO)" || (echo "Usage: make all VIDEO=/path/to/video.mp4 [OUT=./out] [FONT=Sarabun]" >&2; exit 1)
@@ -53,7 +54,7 @@ all:
 	@test -n "$(LLM_API_KEY)" || (echo "Missing LLM_API_KEY" >&2; exit 1)
 	@test -n "$(LLM_MODEL)" || (echo "Missing LLM_MODEL" >&2; exit 1)
 	LLM_BASE_URL="$(LLM_BASE_URL)" LLM_API_KEY="$(LLM_API_KEY)" LLM_MODEL="$(LLM_MODEL)" \
-	$(VENV_PYTHON) subtitle_pipeline.py all "$(VIDEO)" $(if $(OUT),--output-dir "$(OUT)",) $(if $(FONT),--font-name "$(FONT)",) $(if $(START),--start-time "$(START)",) $(if $(DURATION),--duration "$(DURATION)",)
+	$(UV_RUN) python subtitle_pipeline.py all "$(VIDEO)" $(if $(OUT),--output-dir "$(OUT)",) $(if $(FONT),--font-name "$(FONT)",) $(if $(START),--start-time "$(START)",) $(if $(DURATION),--duration "$(DURATION)",)
 
 clean:
 	rm -rf __pycache__
@@ -61,4 +62,4 @@ clean:
 ui: install
 	@echo "Starting Web UI..."
 	@sleep 1.5 && open http://127.0.0.1:8000 &
-	$(VENV_PYTHON) web_ui/server.py
+	$(UV_RUN) python web_ui/server.py

@@ -205,8 +205,7 @@ def require_module(module_name: str, package_name: str) -> None:
     if find_spec(module_name) is None:
         raise PipelineError(
             f"Missing Python dependency '{package_name}'. "
-            "Create a virtualenv and install dependencies with "
-            "`python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`."
+            "Install dependencies with `uv sync`, then run this command with `uv run`."
         )
 
 

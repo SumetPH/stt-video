@@ -4,9 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import os
+import shutil
 import subprocess
-import sys
 import threading
 import time
 import webbrowser
@@ -14,14 +13,7 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-VENV_DIR = BASE_DIR / ".venv"
-REQUIREMENTS_FILE = BASE_DIR / "requirements.txt"
-
-
-def venv_python() -> Path:
-    if os.name == "nt":
-        return VENV_DIR / "Scripts" / "python.exe"
-    return VENV_DIR / "bin" / "python"
+UV = shutil.which("uv") or "uv"
 
 
 def run_command(cmd: list[str]) -> None:
@@ -29,16 +21,8 @@ def run_command(cmd: list[str]) -> None:
     subprocess.run(cmd, cwd=BASE_DIR, check=True)
 
 
-def ensure_venv() -> Path:
-    python_bin = venv_python()
-    if not python_bin.exists():
-        run_command([sys.executable, "-m", "venv", str(VENV_DIR)])
-    return python_bin
-
-
-def install_requirements(python_bin: Path) -> None:
-    run_command([str(python_bin), "-m", "pip", "install", "--upgrade", "pip"])
-    run_command([str(python_bin), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)])
+def sync_environment() -> None:
+    run_command([UV, "sync"])
 
 
 def open_browser_later(url: str, delay: float) -> None:
@@ -58,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-install",
         action="store_true",
-        help="Skip virtualenv creation and dependency installation.",
+        help="Skip uv sync and use the existing environment.",
     )
     parser.add_argument(
         "--no-browser",
@@ -75,18 +59,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    python_bin = venv_python()
 
     if args.no_install:
-        if not python_bin.exists():
-            print(
-                "Missing .venv. Run without --no-install first, or run make install.",
-                file=sys.stderr,
-            )
-            return 1
+        run_prefix = [UV, "run", "--no-sync"]
     else:
-        python_bin = ensure_venv()
-        install_requirements(python_bin)
+        sync_environment()
+        run_prefix = [UV, "run", "--no-sync"]
 
     url = f"http://{args.host}:{args.port}"
     if not args.no_browser:
@@ -94,8 +72,7 @@ def main() -> int:
 
     print(f"Starting Web UI at {url}", flush=True)
     cmd = [
-        str(python_bin),
-        "-m",
+        *run_prefix,
         "uvicorn",
         "web_ui.server:app",
         "--host",

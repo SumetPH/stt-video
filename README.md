@@ -38,11 +38,10 @@
 ติดตั้ง Python dependencies:
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+uv sync
 ```
+
+ต้องติดตั้ง [uv](https://docs.astral.sh/uv/getting-started/installation/) ก่อน
 
 หรือใช้ `make`:
 
@@ -104,7 +103,7 @@ prompts/korean-thai-livestream.md
 ถ้าต้องการเปลี่ยนคาแรกเตอร์ผู้พูดหรือโทนภาษา ให้แก้ส่วน `Speaker profile` ในไฟล์นี้ หรือทำไฟล์ใหม่แล้วระบุ path ตอนรัน:
 
 ```bash
-.venv/bin/python subtitle_pipeline.py translate /path/to/raw.srt \
+uv run python subtitle_pipeline.py translate /path/to/raw.srt \
   --translation-prompt ./prompts/my-speaker.md \
   --output-dir ./out
 ```
@@ -114,13 +113,13 @@ prompts/korean-thai-livestream.md
 รันครบทั้ง pipeline:
 
 ```bash
-.venv/bin/python subtitle_pipeline.py all /path/to/video.mp4 --output-dir ./out
+uv run python subtitle_pipeline.py all /path/to/video.mp4 --output-dir ./out
 ```
 
 หรือถ้าไม่ใส่ subcommand สคริปต์จะถือว่าเป็น `all` ให้อัตโนมัติ:
 
 ```bash
-.venv/bin/python subtitle_pipeline.py /path/to/video.mp4 --output-dir ./out
+uv run python subtitle_pipeline.py /path/to/video.mp4 --output-dir ./out
 ```
 
 ใช้ `make`:
@@ -137,13 +136,13 @@ make all VIDEO=/path/to/video.mp4 OUT=./out \
 ### 1) Transcribe
 
 ```bash
-.venv/bin/python subtitle_pipeline.py transcribe /path/to/video.mp4 --output-dir ./out
+uv run python subtitle_pipeline.py transcribe /path/to/video.mp4 --output-dir ./out
 ```
 
 รองรับตัดเฉพาะช่วง:
 
 ```bash
-.venv/bin/python subtitle_pipeline.py transcribe /path/to/video.mp4 \
+uv run python subtitle_pipeline.py transcribe /path/to/video.mp4 \
   --start-time 00:10:00 \
   --duration 300 \
   --output-dir ./out
@@ -158,13 +157,13 @@ make transcribe VIDEO=/path/to/video.mp4 OUT=./out START=00:10:00 DURATION=300
 ### 2) Translate
 
 ```bash
-.venv/bin/python subtitle_pipeline.py translate /path/to/raw.srt --output-dir ./out
+uv run python subtitle_pipeline.py translate /path/to/raw.srt --output-dir ./out
 ```
 
 ระบุ LLM settings ผ่าน flag ได้:
 
 ```bash
-.venv/bin/python subtitle_pipeline.py translate /path/to/raw.srt \
+uv run python subtitle_pipeline.py translate /path/to/raw.srt \
   --llm-base-url http://localhost:1234 \
   --llm-model gemini-2.0-flash \
   --llm-api-key "" \
@@ -183,7 +182,7 @@ make translate SRT=/path/to/raw.srt OUT=./out \
 ### 3) Burn Subtitle
 
 ```bash
-.venv/bin/python subtitle_pipeline.py burn /path/to/video.mp4 /path/to/translated.srt \
+uv run python subtitle_pipeline.py burn /path/to/video.mp4 /path/to/translated.srt \
   --font-name "Sarabun" \
   --output-dir ./out
 ```
@@ -197,7 +196,7 @@ make burn VIDEO=/path/to/video.mp4 SRT=/path/to/translated.srt OUT=./out FONT=Sa
 ### 4) All-in-one
 
 ```bash
-.venv/bin/python subtitle_pipeline.py all /path/to/video.mp4 \
+uv run python subtitle_pipeline.py all /path/to/video.mp4 \
   --start-time 00:10:00 \
   --duration 300 \
   --font-name "Sarabun" \
@@ -238,9 +237,9 @@ out/
 ดู help:
 
 ```bash
-python3 subtitle_pipeline.py --help
-python3 subtitle_pipeline.py transcribe --help
-python3 subtitle_pipeline.py translate --help
-python3 subtitle_pipeline.py burn --help
-python3 subtitle_pipeline.py all --help
+uv run python subtitle_pipeline.py --help
+uv run python subtitle_pipeline.py transcribe --help
+uv run python subtitle_pipeline.py translate --help
+uv run python subtitle_pipeline.py burn --help
+uv run python subtitle_pipeline.py all --help
 ```
